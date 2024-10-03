@@ -9,8 +9,9 @@ pub struct User {
     available: bool,
 }
 
+#[near]
 impl Contract {
-    fn is_registered() {}
+    pub(crate) fn internal_user_is_registered() {}
     fn get_user_uid() {}
     fn get_staked_for() {}
     fn get_unstaked_for() {}
@@ -18,12 +19,17 @@ impl Contract {
     fn get_total_users() {}
     fn take_over_guardia() {}
     fn set_withdraw_turn() {}
-    fn add_new_user() {}
-    fn stake_tickets_for() {}
+    pub(crate) fn internal_add_new_user() {}
+
     fn remove_tickets_from() {}
     fn unstake_tickets_for() {}
     fn withdraw_all_for() {}
     fn random_u128() {}
     fn choose_random_winner() {}
     fn find_user_with_ticket() {}
+
+
+    pub(crate) fn internal_stake_tickets_for(&mut self, user: AccountId, amount: NearToken) {
+    
+    }
 }

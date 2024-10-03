@@ -29,7 +29,7 @@ mod pool;
 mod users;
 
 #[near(serializers=[borsh, serde])]
-pub struct PoolInfo {
+pub struct Pool {
     pub total_staked: NearToken,
     pub waiting_to_unstake: NearToken,
     pub reserve: NearToken,
@@ -37,11 +37,11 @@ pub struct PoolInfo {
     pub last_prize_update: u64,
     pub next_raffle: u64,
     pub withdraw_ready: bool,
-    pub pool_tickets: u64,
+    pub pool_tickets: NearToken,
     pub total_users: u64,
 }
 
-impl Default for PoolInfo {
+impl Default for Pool {
     fn default() -> Self {
         Self {
             total_staked: NearToken::from_yoctonear(0),
@@ -51,7 +51,7 @@ impl Default for PoolInfo {
             last_prize_update: 0,
             next_raffle: 0,
             withdraw_ready: false,
-            pool_tickets: 0,
+            pool_tickets: NearToken::from_yoctonear(0),
             total_users: 0,
         }
     }
@@ -75,7 +75,7 @@ pub struct Config {
 #[derive(PanicOnDefault)]
 pub struct Contract {
     config: Config,
-    pool_config: PoolInfo,
+    pool: Pool,
 }
 
 // Implement the contract structure
@@ -105,14 +105,14 @@ impl Contract {
                 time_between_raffles: time_between_raffles.unwrap_or(RAFFLE_WAIT).0,
                 emergency: false,
             },
-            pool_config: PoolInfo::default(),
+            pool: Pool::default(),
         }
     }
 
     // Getters
     //
-    pub fn get_tickets(&self) -> u64 {
-        self.pool_config.pool_tickets
+    pub fn get_tickets(&self) -> NearToken {
+        self.pool.pool_tickets
     }
 
     pub fn get_time_between_raffles(&self) -> U64 {
@@ -183,11 +183,6 @@ impl Contract {
     #[private]
     pub fn emergency_start(&mut self) {
         self.config.emergency = true;
-    }
-
-    #[private]
-    pub fn set_tickets(&mut self, tickets: U64) {
-        self.pool_config.pool_tickets = tickets.0;
     }
 }
 
