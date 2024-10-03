@@ -69,6 +69,6 @@ HOST_ARFLAGS = None
 cargo:rerun-if-env-changed=ARFLAGS
 ARFLAGS = None
 cargo:rustc-link-lib=static=bz2
-cargo:rustc-link-search=native=/Users/flamel/contracts/poolparty/target/debug/build/bzip2-sys-384683b7d7e3073f/out/lib
-cargo:root=/Users/flamel/contracts/poolparty/target/debug/build/bzip2-sys-384683b7d7e3073f/out
-cargo:include=/Users/flamel/contracts/poolparty/target/debug/build/bzip2-sys-384683b7d7e3073f/out/include
+cargo:rustc-link-search=native=/Users/gagdiez/tmp/poolparty/target/debug/build/bzip2-sys-384683b7d7e3073f/out/lib
+cargo:root=/Users/gagdiez/tmp/poolparty/target/debug/build/bzip2-sys-384683b7d7e3073f/out
+cargo:include=/Users/gagdiez/tmp/poolparty/target/debug/build/bzip2-sys-384683b7d7e3073f/out/include

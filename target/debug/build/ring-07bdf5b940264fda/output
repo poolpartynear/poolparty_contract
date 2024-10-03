@@ -2,7 +2,7 @@ cargo:rerun-if-env-changed=RING_PREGENERATE_ASM
 cargo:rustc-env=RING_CORE_PREFIX=ring_core_0_17_8_
 OPT_LEVEL = Some(0)
 TARGET = Some(aarch64-apple-darwin)
-OUT_DIR = Some(/Users/flamel/contracts/poolparty/target/debug/build/ring-07bdf5b940264fda/out)
+OUT_DIR = Some(/Users/gagdiez/tmp/poolparty/target/debug/build/ring-07bdf5b940264fda/out)
 HOST = Some(aarch64-apple-darwin)
 cargo:rerun-if-env-changed=CC_aarch64-apple-darwin
 CC_aarch64-apple-darwin = None
@@ -54,7 +54,7 @@ exit status: 0
 cargo:rustc-link-lib=static=ring_core_0_17_8_
 OPT_LEVEL = Some(0)
 TARGET = Some(aarch64-apple-darwin)
-OUT_DIR = Some(/Users/flamel/contracts/poolparty/target/debug/build/ring-07bdf5b940264fda/out)
+OUT_DIR = Some(/Users/gagdiez/tmp/poolparty/target/debug/build/ring-07bdf5b940264fda/out)
 HOST = Some(aarch64-apple-darwin)
 cargo:rerun-if-env-changed=CC_aarch64-apple-darwin
 CC_aarch64-apple-darwin = None
@@ -80,7 +80,7 @@ HOST_CFLAGS = None
 cargo:rerun-if-env-changed=CFLAGS
 CFLAGS = None
 cargo:rustc-link-lib=static=ring_core_0_17_8_test
-cargo:rustc-link-search=native=/Users/flamel/contracts/poolparty/target/debug/build/ring-07bdf5b940264fda/out
+cargo:rustc-link-search=native=/Users/gagdiez/tmp/poolparty/target/debug/build/ring-07bdf5b940264fda/out
 cargo:rerun-if-changed=crypto/perlasm/x86_64-xlate.pl
 cargo:rerun-if-changed=crypto/perlasm/x86gas.pl
 cargo:rerun-if-changed=crypto/perlasm/x86nasm.pl

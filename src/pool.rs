@@ -44,7 +44,6 @@ impl Contract {
     //   return new Users.User(tickets, unstaked, remaining, available)
     // }
 
-    // Deposit and stake ----------------------------------------------------------
     #[payable]
     pub fn deposit_and_stake(&mut self) -> Promise {
         let deposit_amount = env::attached_deposit();
@@ -59,11 +58,9 @@ impl Contract {
         );
 
         let user = env::predecessor_account_id();
-
-          if self.internal_user_is_registered(user) {
-            log!("Staking on NEW user");
-            users::internal_add_new_user(user);
-          }
+          if self.users.is_registered(&user) {
+            log!("Staking on EXISTING user");
+          } 
 
         //   assert(Users.get_staked_for(user) + amount <= max_amount,
         //     `Surpassed the limit of ${max_amount} tickets that a user can have`)

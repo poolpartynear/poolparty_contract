@@ -1,5 +1,6 @@
 // Find all our documentation at https://docs.near.org
 use near_sdk::{env, json_types::U64, log, near, AccountId, NearToken, PanicOnDefault};
+use users::UserStorage;
 
 // The raffle happens once per day
 const RAFFLE_WAIT: U64 = U64(86400000000000);
@@ -24,8 +25,6 @@ const MIN_TO_RAFFLE: NearToken = NearToken::from_millinear(1);
 
 // Maximum amount to Raffle (50 NEAR)
 const MAX_TO_RAFFLE: NearToken = NearToken::from_near(50);
-
-use crate::users::*;
 
 pub mod pool;
 pub mod users;
@@ -61,6 +60,7 @@ impl Default for Pool {
 }
 
 #[near(serializers=[borsh, serde])]
+#[derive(Clone)]
 pub struct Config {
     external_pool: AccountId,
     next_raffle_timestamp: u64,
@@ -79,6 +79,7 @@ pub struct Config {
 pub struct Contract {
     config: Config,
     pool: Pool,
+    users: UserStorage
 }
 
 // Implement the contract structure
@@ -113,7 +114,6 @@ impl Contract {
     }
 
     // Getters
-    //
     pub fn get_tickets(&self) -> NearToken {
         self.pool.pool_tickets
     }
@@ -122,35 +122,13 @@ impl Contract {
         U64(self.config.time_between_raffles)
     }
 
-    pub fn get_external_pool(&self) -> &AccountId {
-        &self.config.external_pool
+    pub fn get_config(&self) -> Config {
+        self.config.clone()
     }
 
-    pub fn get_max_deposit(&self) -> NearToken {
-        self.config.max_deposit
-    }
-    pub fn get_min_deposit(&self) -> NearToken {
-        self.config.min_deposit
-    }
-
-    pub fn get_min_raffle(&self) -> NearToken {
-        self.config.min_to_raffle
-    }
-
-    pub fn get_max_raffle(&self) -> NearToken {
-        self.config.max_to_raffle
-    }
-
-    pub fn get_epoch_wait(&self) -> U64 {
-        U64(self.config.epochs_wait)
-    }
-
-    pub fn is_user_reg() ->bool {
-        internal_user_is_registered(user)
-    }
-
-    // Setters
-    //
+    // pub fn is_user_reg() ->bool {
+    //     internal_user_is_registered(user)
+    // }
 
     #[private]
     pub fn change_time_between_raffles(&mut self, time: U64) {
