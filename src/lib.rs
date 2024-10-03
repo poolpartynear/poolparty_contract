@@ -25,8 +25,11 @@ const MIN_TO_RAFFLE: NearToken = NearToken::from_millinear(1);
 // Maximum amount to Raffle (50 NEAR)
 const MAX_TO_RAFFLE: NearToken = NearToken::from_near(50);
 
-mod pool;
-mod users;
+use crate::users::*;
+
+pub mod pool;
+pub mod users;
+
 
 #[near(serializers=[borsh, serde])]
 pub struct Pool {
@@ -140,6 +143,10 @@ impl Contract {
 
     pub fn get_epoch_wait(&self) -> U64 {
         U64(self.config.epochs_wait)
+    }
+
+    pub fn is_user_reg() ->bool {
+        internal_user_is_registered(user)
     }
 
     // Setters

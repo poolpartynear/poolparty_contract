@@ -11,7 +11,9 @@ pub struct User {
 
 #[near]
 impl Contract {
-    pub(crate) fn internal_user_is_registered() {}
+    pub(crate) fn internal_user_is_registered(&self, user: &AccountId) -> bool {
+        true
+    }
     fn get_user_uid() {}
     fn get_staked_for() {}
     fn get_unstaked_for() {}
@@ -33,3 +35,7 @@ impl Contract {
     
     }
 }
+S
+    pub fn internal_user_is_registered(user: &AccountId) -> bool {
+        true
+    }

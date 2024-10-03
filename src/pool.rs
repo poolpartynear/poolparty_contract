@@ -1,12 +1,12 @@
 use crate::*;
-use near_sdk::{serde_json::json, json_types::U128, near, require, Gas, Promise, PromiseError};
+use near_sdk::{serde_json::json, near, require, Gas, Promise, PromiseError};
 
 const NO_ARGS: Vec<u8> = vec![];
 const NO_DEPOSIT: NearToken = NearToken::from_near(0);
 
 #[near]
 impl Contract {
-    pub fn get_info(&self)  {
+    // pub fn get_info(&self)  {
         // Returns the: amount of tickets in the pool, current prize,
         // next timestamp to do the raffle, and if we should call the external pool
         // const to_unstake: u128 = External.get_to_unstake()
@@ -22,7 +22,7 @@ impl Contract {
 
         // return new PoolInfo(tickets, to_unstake, reserve, prize, fees, last_prize_update,
         //                     next_raffle, withdraw_external_ready)
-    }
+    // }
 
     // export function get_account(account_id: string): Users.User {
     //   // Returns information for the account 'account_id'
@@ -60,9 +60,9 @@ impl Contract {
 
         let user = env::predecessor_account_id();
 
-          if internal_user_is_registered(user) {
+          if self.internal_user_is_registered(user) {
             log!("Staking on NEW user");
-            internal_add_new_user(user);
+            users::internal_add_new_user(user);
           }
 
         //   assert(Users.get_staked_for(user) + amount <= max_amount,
@@ -128,7 +128,7 @@ impl Contract {
     }
 
     // Unstake --------------------------------------------------------------------
-    pub fn unstake(&mut self, amount: U128) {
+    // pub fn unstake(&mut self, amount: U128) {
         // require!(!DAO.is_emergency(), "We will be back soon");
 
         //   const user: string = context.predecessor
@@ -153,7 +153,8 @@ impl Contract {
         //   // update user info
         //   Users.unstake_tickets_for(user, amount)
 
-        //   logging.log(
+
+        // log!(
         //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "unstake", "data": {"pool": "${context.contractName}", "user": "${user}", "amount": "${amount}", "all": "${withdraw_all}"}}`
         //   );
 
@@ -161,7 +162,7 @@ impl Contract {
         // }
 
         // Withdraw all ---------------------------------------------------------------
-        pub fn withdraw_all(&mut self) {
+        // pub fn withdraw_all(&mut self) {
             //   assert(!DAO.is_emergency(), 'We will be back soon')
 
             //   assert(context.prepaidGas >= 20 * TGAS, "Use at least 20Tgas")
@@ -184,7 +185,7 @@ impl Contract {
             //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "transfer", "data": {"pool": "${context.contractName}", "user": "${user}", "amount": "${amount}"}}`
             //   );
             // }
-        }
+        // }
 
         // Raffle ---------------------------------------------------------------------
         // export function raffle(): string {
@@ -267,5 +268,5 @@ impl Contract {
 
         //   // Give to the user, note that updating the tree can cost up to 90 TGAS
         //   Users.stake_tickets_for(to, amount)
-    }
+    // }
 }
