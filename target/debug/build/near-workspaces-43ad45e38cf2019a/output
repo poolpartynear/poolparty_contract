@@ -1,2 +1,0 @@
-cargo:rerun-if-env-changed=NEAR_SANDBOX_BIN_PATH
-Installed near-sandbox into /Users/gagdiez/tmp/poolparty/target/debug/build/near-sandbox-utils-cfec9a1526aa391b/out/.near/near-sandbox-2.0.0/near-sandbox
