@@ -4,6 +4,7 @@ use users::Winner;
 
 const NO_ARGS: Vec<u8> = vec![];
 const NO_DEPOSIT: NearToken = NearToken::from_near(0);
+const PRIZE_UPDATE_INTERVAL: u64 = 10000000000;
 
 #[near]
 impl Contract {
@@ -25,6 +26,40 @@ impl Contract {
         // return new PoolInfo(tickets, to_unstake, reserve, prize, fees, last_prize_update,
         //                     next_raffle, withdraw_external_ready)
         // }
+    }
+
+    pub fn get_number_of_winners(&self) -> u32 {
+        self.pool.winners.len() as u32
+    }
+
+    pub fn get_winners(&self, from: u32, limit: u32) -> Vec<&Winner> {
+        require!(
+            from.lt(&self.get_number_of_winners()),
+            format!("'from' must be < {}", self.get_number_of_winners())
+        );
+
+        require!(
+            limit.gt(&0) && limit.le(&self.get_number_of_winners()),
+            format!(
+                "'limit' must be between 1 and {}",
+                self.get_number_of_winners()
+            )
+        );
+
+        self.pool
+            .winners
+            .iter()
+            .skip(from as usize)
+            .take(limit as usize)
+            .collect()
+    }
+
+    pub fn get_last_prize_update(&self) -> u64 {
+        self.pool.last_prize_update
+    }
+
+    pub fn get_pool_prize(&self) -> NearToken {
+        self.pool.prize_pool
     }
 
     #[payable]
@@ -240,26 +275,71 @@ impl Contract {
         winner
     }
 
-    pub fn number_of_winners(&self) -> u32 {
-        self.pool.winners.len() as u32
+    pub fn update_prize(&mut self) -> Promise {
+        require!(!self.config.emergency, "We will be back soon");
+
+        require!(
+            env::prepaid_gas().gt(&Gas::from_tgas(40)),
+            "Please use at least 40Tgas"
+        );
+
+        let now: u64 = env::block_timestamp_ms();
+        let last_update: u64 = self.pool.last_prize_update;
+
+        require!(
+            now.ge(&(last_update + PRIZE_UPDATE_INTERVAL)),
+            "Not enough time has passed"
+        );
+
+        Promise::new(self.config.external_pool.clone())
+            .function_call(
+                "get_account_staked_balance".to_string(),
+                json!({ "account_id": env::current_account_id()})
+                    .to_string()
+                    .into_bytes(),
+                NO_DEPOSIT,
+                Gas::from_tgas(20), // Todo: Check the Gas amount
+            )
+            .then(Promise::new(env::current_account_id()).function_call(
+                "update_prize_callback".to_string(),
+                NO_ARGS,
+                NO_DEPOSIT,
+                Gas::from_tgas(20), // Todo: Check the Gas amount
+            ))
     }
 
-    pub fn get_winners(&self, from: u32, limit: u32) -> Vec<&Winner> {
-        require!(
-            from.lt(&self.number_of_winners()),
-            format!("'from' must be < {}", self.number_of_winners())
-        );
+    #[private]
+    pub fn update_prize_callback(
+        &mut self,
+        #[callback_result] call_result: Result<NearToken, PromiseError>,
+    ) {
+        let mut prize: NearToken = self.pool.prize_pool;
 
-        require!(
-            limit.gt(&0) && limit.le(&self.number_of_winners()),
-            format!("'limit' must be between 1 and {}", self.number_of_winners())
-        );
+        if call_result.is_err() {
+            // Todo: emit event?
+            log!("Failed to update the prize");
+        }
 
-        self.pool
-            .winners
-            .iter()
-            .skip(from as usize)
-            .take(limit as usize)
-            .collect()
+        let staked_in_external: NearToken = call_result.unwrap();
+
+        // The difference between the staked_balance in the external pool and the
+        // tickets we have in our pool is the prize
+        if staked_in_external.gt(&self.pool.pool_tickets) {
+            prize = staked_in_external.saturating_sub(self.pool.pool_tickets);
+        }
+
+        if prize.gt(&self.config.max_to_raffle) {
+            prize = self.config.max_to_raffle
+        }
+
+        // todo: emit event
+        // Update prize_pool
+        log!("New prize: {}", prize.exact_amount_display());
+        self.pool.prize_pool = prize;
+
+        // Update last_prize_update
+        self.pool.last_prize_update = env::block_timestamp_ms();
+
+        prize
     }
 }

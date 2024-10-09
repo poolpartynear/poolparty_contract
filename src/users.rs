@@ -111,8 +111,8 @@ impl UserStorage {
         //     user_staked.push(u128.Zero)
         //   }
 
-          self.user_to_uid.set(user.clone(), uid);
-          self.uid_to_user.set(uid, user);
+        self.user_to_uid.set(user.clone(), Some(uid));
+        self.uid_to_user.set(uid, Some(user.clone()));
 
         return uid;
     }
