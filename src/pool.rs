@@ -312,7 +312,7 @@ impl Contract {
     pub fn update_prize_callback(
         &mut self,
         #[callback_result] call_result: Result<NearToken, PromiseError>,
-    ) {
+    ) -> NearToken {
         let mut prize: NearToken = self.pool.prize_pool;
 
         if call_result.is_err() {
