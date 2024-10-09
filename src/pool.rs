@@ -1,12 +1,14 @@
 use crate::*;
-use near_sdk::{serde_json::json, near, require, Gas, Promise, PromiseError};
+use near_sdk::{near, require, serde_json::json, Gas, Promise, PromiseError};
+use users::Winner;
 
 const NO_ARGS: Vec<u8> = vec![];
 const NO_DEPOSIT: NearToken = NearToken::from_near(0);
 
 #[near]
 impl Contract {
-    // pub fn get_info(&self)  {
+    pub fn get_pool_info(&self) -> Pool {
+        self.pool.clone()
         // Returns the: amount of tickets in the pool, current prize,
         // next timestamp to do the raffle, and if we should call the external pool
         // const to_unstake: u128 = External.get_to_unstake()
@@ -22,27 +24,8 @@ impl Contract {
 
         // return new PoolInfo(tickets, to_unstake, reserve, prize, fees, last_prize_update,
         //                     next_raffle, withdraw_external_ready)
-    // }
-
-    // export function get_account(account_id: string): Users.User {
-    //   // Returns information for the account 'account_id'
-    //   if (!Users.is_registered(account_id)) {
-    //     return new Users.User(u128.Zero, u128.Zero, 0, false)
-    //   }
-
-    //   const tickets: u128 = Users.get_staked_for(account_id)
-    //   const unstaked: u128 = Users.get_unstaked_for(account_id)
-
-    //   const when: u64 = Users.get_withdraw_turn_for(account_id)
-    //   const now: u64 = External.get_current_turn()
-
-    //   // Compute remaining time for withdraw to be ready
-    //   const remaining: u64 = (when > now) ? when - now : 0
-
-    //   const available: bool = unstaked > u128.Zero && now >= when
-
-    //   return new Users.User(tickets, unstaked, remaining, available)
-    // }
+        // }
+    }
 
     #[payable]
     pub fn deposit_and_stake(&mut self) -> Promise {
@@ -58,12 +41,21 @@ impl Contract {
         );
 
         let user = env::predecessor_account_id();
-          if self.users.is_registered(&user) {
+        // Todo: evaluate if we need this log
+        if self.user_storage.is_registered(&user) {
             log!("Staking on EXISTING user");
-          } 
+        }
 
-        //   assert(Users.get_staked_for(user) + amount <= max_amount,
-        //     `Surpassed the limit of ${max_amount} tickets that a user can have`)
+        require!(
+            self.user_storage
+                .get_staked_for(&user)
+                .saturating_add(deposit_amount)
+                .le(&self.config.max_deposit),
+            format!(
+                "Surpassed the limit of {} tickets that a user can have",
+                &self.config.max_deposit
+            )
+        );
 
         // Deposit the tokens in the external pool
 
@@ -83,7 +75,7 @@ impl Contract {
             .then(
                 Promise::new(env::current_account_id()).function_call(
                     "deposit_and_stake_callback".to_string(),
-                    json!({ "user": user, "tickets_amount": deposit})
+                    json!({ "user": user, "tickets_amount": deposit_amount})
                         .to_string()
                         .into_bytes(),
                     NO_DEPOSIT,
@@ -108,8 +100,7 @@ impl Contract {
         }
 
         // It worked, give tickets to the user
-
-        internal_stake_tickets_for(user, &tickets_amount);
+        self.user_storage.stake_tickets_for(&user, tickets_amount);
 
         let event_args = json!({
             "standard": "nep297",
@@ -121,20 +112,23 @@ impl Contract {
             },
         });
 
-        log!("EVENT_JSON:{}", event_args.to_string()) ;
+        log!("EVENT_JSON:{}", event_args.to_string());
     }
 
     // Unstake --------------------------------------------------------------------
-    // pub fn unstake(&mut self, amount: U128) {
-        // require!(!DAO.is_emergency(), "We will be back soon");
+    pub fn unstake(&mut self, user: AccountId, amount: NearToken) {
+        require!(!self.config.emergency, "We will be back soon");
+        require!(
+            self.user_storage.is_registered(&user),
+            "User not registered in the pool"
+        );
 
-        //   const user: string = context.predecessor
-        //   assert(Users.is_registered(user), "User not registered in the pool")
+        let user_tickets = self.user_storage.get_staked_for(&user);
 
-        //   const user_tickets = Users.get_staked_for(user)
-
-        //   // Check if it has enough money
-        //   assert(amount <= user_tickets, "Not enough money")
+        require!(
+            amount.le(&user_tickets),
+            format!("Amount cant exceed {}", user_tickets)
+        );
 
         //   const withdraw_all: bool = (user_tickets - amount) < DAO.get_min_deposit();
         //   if (withdraw_all) {
@@ -149,68 +143,81 @@ impl Contract {
 
         //   // update user info
         //   Users.unstake_tickets_for(user, amount)
+        //
+        //
 
+        let event_args = json!({
+            "standard": "nep297",
+            "version": "1.0.0",
+            "event": "unstake",
+            "data": {
+                "user": user,
+                "amount": amount,
+                // "all": withdraw_all,
+            },
+        });
 
-        // log!(
-        //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "unstake", "data": {"pool": "${context.contractName}", "user": "${user}", "amount": "${amount}", "all": "${withdraw_all}"}}`
-        //   );
+        log!("EVENT_JSON:{}", event_args.to_string());
+    }
 
-        //   return true
-        // }
+    // Withdraw all ---------------------------------------------------------------
+    pub fn withdraw_all(&mut self) {
+        let user = env::predecessor_account_id();
 
-        // Withdraw all ---------------------------------------------------------------
-        // pub fn withdraw_all(&mut self) {
-            //   assert(!DAO.is_emergency(), 'We will be back soon')
+        require!(!self.config.emergency, "We will be back soon");
+        require!(
+            env::prepaid_gas().ge(&Gas::from_tgas(20)),
+            "Use at least 20Tgas"
+        ); // Todo: Check the Gas amount
+        require!(
+            self.user_storage.is_registered(&user),
+            "User is not registered"
+        );
 
-            //   assert(context.prepaidGas >= 20 * TGAS, "Use at least 20Tgas")
+        //   assert(External.get_current_turn() >= Users.get_withdraw_turn_for(user), "Withdraw not ready")
 
-            //   const user: string = context.predecessor
+        let amount: NearToken = self.user_storage.withdraw_all_for(&user);
+        require!(!amount.is_zero(), "Nothing to withdraw");
 
-            //   assert(Users.is_registered(user), "User is not registered")
+        // Tranfer the tokens to the user
+        Promise::new(user.clone()).transfer(amount);
 
-            //   assert(user != DAO.get_guardian(), "The guardian cannot withdraw money")
+        let event_args = json!({
+            "standard": "nep297",
+            "version": "1.0.0",
+            "event": "transfer",
+            "data": {
+                "user": user,
+                "amount": amount,
+            },
+        });
 
-            //   assert(External.get_current_turn() >= Users.get_withdraw_turn_for(user), "Withdraw not ready")
+        log!("EVENT_JSON:{}", event_args.to_string());
+    }
 
-            //   const amount: u128 = Users.withdraw_all_for(user)
-            //   assert(amount > u128.Zero, "Nothing to withdraw")
+    // Raffle ---------------------------------------------------------------------
+    pub fn raffle(&mut self) -> AccountId {
+        require!(!self.config.emergency, "We will be back soon");
 
-            //   // Send money to the user, always succeed
-            //   ContractPromiseBatch.create(user).transfer(amount)
+        let now: u64 = env::block_timestamp_ms();
+        let prize: NearToken = self.pool.prize_pool;
 
-            //   logging.log(
-            //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "transfer", "data": {"pool": "${context.contractName}", "user": "${user}", "amount": "${amount}"}}`
-            //   );
-            // }
-        // }
+        require!(now.ge(&self.pool.next_raffle), "Not enough time has passed");
+        require!(
+            prize.ge(&self.config.min_to_raffle),
+            "Not enough prize to raffle"
+        );
+        // Pick a random ticket as winner
+        let winner: AccountId = self.user_storage.choose_random_winner();
 
-        // Raffle ---------------------------------------------------------------------
-        // export function raffle(): string {
-        //   assert(!DAO.is_emergency(), 'We will be back soon')
-
-        //   // Function to make the raffle
-        //   const now: u64 = env.block_timestamp()
-
-        //   const next_raffle: u64 = storage.getPrimitive<u64>('nxt_raffle_tmstmp', 0)
-
-        //   assert(now >= next_raffle, "Not enough time has passed")
-
-        //   // Check if there is a prize to be raffled
-        //   const prize: u128 = Prize.get_pool_prize()
-
-        //   if (prize < DAO.get_min_raffle()) { return "" }
-
-        //   // Pick a random ticket as winner
-        //   const winner: string = Users.choose_random_winner()
-
-        //   // A part goes to the reserve
+        // A part goes to the reserve
         //   const fees: u128 = u128.from(DAO.get_pool_fees())
         //   const reserve_prize: u128 = (prize * fees) / u128.from(100)
 
         //   const guardian: string = DAO.get_guardian()
         //   Users.stake_tickets_for(guardian, reserve_prize)
 
-        //   // We give most to the user
+        // We give most to the user
         //   const user_prize: u128 = prize - reserve_prize
         //   Users.stake_tickets_for(winner, user_prize)
 
@@ -224,46 +231,35 @@ impl Contract {
         //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "prize-reserve", "data": {"pool": "${context.contractName}", "user": "${guardian}", "amount": "${reserve_prize}"}}`
         //   );
 
-        //   // Set next raffle time
-        //   storage.set<u64>('nxt_raffle_tmstmp', now + DAO.get_time_between_raffles())
-        //   storage.set<u128>('prize', u128.Zero)
+        // Set next raffle time
+        self.pool.next_raffle = now + self.config.time_between_raffles;
+        self.pool.prize_pool = NearToken::from_near(0);
 
-        //   winners.push(new Winner(winner, user_prize, now))
-        //   return winner
-        // }
+        self.pool.winners.push(Winner(winner.clone(), prize, now));
 
-        // export function number_of_winners(): i32 {
-        //   // Returns the number of winners so far
-        //   return winners.length
-        // }
+        winner
+    }
 
-        // export function get_winners(from: u32, until: u32): Array<Winner> {
-        //   assert(<i32>until <= number_of_winners(), "'until' must be <= number_of_winners")
+    pub fn number_of_winners(&self) -> u32 {
+        self.pool.winners.len() as u32
+    }
 
-        //   let to_return: Array<Winner> = new Array<Winner>()
-        //   for (let i: i32 = <i32>from; i < <i32>until; i++) {
-        //     to_return.push(winners[i])
-        //   }
+    pub fn get_winners(&self, from: u32, limit: u32) -> Vec<&Winner> {
+        require!(
+            from.lt(&self.number_of_winners()),
+            format!("'from' must be < {}", self.number_of_winners())
+        );
 
-        //   return to_return
-        // }
+        require!(
+            limit.gt(&0) && limit.le(&self.number_of_winners()),
+            format!("'limit' must be between 1 and {}", self.number_of_winners())
+        );
 
-        // // The TOKEN contract can give part of the reserve to a user
-        // export function give_from_reserve(to: string, amount: u128): void {
-        //   assert(context.prepaidGas >= 120 * TGAS, "This function requires at least 120TGAS")
-
-        //   const guardian: string = DAO.get_guardian()
-
-        //   assert(context.predecessor == guardian, "Only the GUARDIAN can use the reserve")
-
-        //   assert(Users.is_registered(to), "User is not registered in the pool")
-
-        //   assert(Users.get_staked_for(guardian) >= amount, "Not enough tickets in the reserve")
-
-        //   // Remove from reserve
-        //   Users.remove_tickets_from(guardian, amount)
-
-        //   // Give to the user, note that updating the tree can cost up to 90 TGAS
-        //   Users.stake_tickets_for(to, amount)
-    // }
+        self.pool
+            .winners
+            .iter()
+            .skip(from as usize)
+            .take(limit as usize)
+            .collect()
+    }
 }

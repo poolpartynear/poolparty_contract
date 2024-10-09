@@ -1,6 +1,8 @@
 // Find all our documentation at https://docs.near.org
-use near_sdk::{env, json_types::U64, log, near, AccountId, NearToken, PanicOnDefault};
-use users::UserStorage;
+use near_sdk::{
+    env, json_types::U64, log, near, store::Vector, AccountId, NearToken, PanicOnDefault,
+};
+use users::{UserStorage, Winner};
 
 // The raffle happens once per day
 const RAFFLE_WAIT: U64 = U64(86400000000000);
@@ -29,8 +31,8 @@ const MAX_TO_RAFFLE: NearToken = NearToken::from_near(50);
 pub mod pool;
 pub mod users;
 
-
 #[near(serializers=[borsh, serde])]
+#[derive(Clone)]
 pub struct Pool {
     pub total_staked: NearToken,
     pub waiting_to_unstake: NearToken,
@@ -41,6 +43,7 @@ pub struct Pool {
     pub withdraw_ready: bool,
     pub pool_tickets: NearToken,
     pub total_users: u64,
+    pub winners: Vec<Winner>,
 }
 
 impl Default for Pool {
@@ -55,6 +58,7 @@ impl Default for Pool {
             withdraw_ready: false,
             pool_tickets: NearToken::from_yoctonear(0),
             total_users: 0,
+            winners: vec![],
         }
     }
 }
@@ -79,7 +83,7 @@ pub struct Config {
 pub struct Contract {
     config: Config,
     pool: Pool,
-    users: UserStorage
+    user_storage: UserStorage,
 }
 
 // Implement the contract structure
@@ -110,6 +114,7 @@ impl Contract {
                 emergency: false,
             },
             pool: Pool::default(),
+            user_storage: UserStorage::default(),
         }
     }
 
@@ -126,10 +131,7 @@ impl Contract {
         self.config.clone()
     }
 
-    // pub fn is_user_reg() ->bool {
-    //     internal_user_is_registered(user)
-    // }
-
+    // Setters
     #[private]
     pub fn change_time_between_raffles(&mut self, time: U64) {
         self.config.time_between_raffles = time.0;
