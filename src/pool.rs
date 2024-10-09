@@ -1,5 +1,5 @@
 use crate::*;
-use near_sdk::{near, require, serde_json::json, Gas, Promise, PromiseError};
+use near_sdk::{json_types::U128, near, require, serde_json::json, Gas, Promise, PromiseError};
 use users::Winner;
 
 const NO_ARGS: Vec<u8> = vec![];
@@ -10,22 +10,6 @@ const PRIZE_UPDATE_INTERVAL: u64 = 10000000000;
 impl Contract {
     pub fn get_pool_info(&self) -> Pool {
         self.pool.clone()
-        // Returns the: amount of tickets in the pool, current prize,
-        // next timestamp to do the raffle, and if we should call the external pool
-        // const to_unstake: u128 = External.get_to_unstake()
-        // const tickets: u128 = get_tickets() - to_unstake
-        // const next_raffle: u64 = storage.getPrimitive<u64>('nxt_raffle_tmstmp', 0)
-        // const prize: u128 = Prize.get_pool_prize()
-        // const fees: u8 = DAO.get_pool_fees()
-        // const last_prize_update: u64 = Prize.get_last_prize_update()
-
-        // const reserve: u128 = Users.get_staked_for(DAO.get_guardian())
-
-        // const withdraw_external_ready: bool = External.can_withdraw_external()
-
-        // return new PoolInfo(tickets, to_unstake, reserve, prize, fees, last_prize_update,
-        //                     next_raffle, withdraw_external_ready)
-        // }
     }
 
     pub fn get_number_of_winners(&self) -> u32 {
@@ -76,16 +60,14 @@ impl Contract {
         );
 
         let user = env::predecessor_account_id();
-        // Todo: evaluate if we need this log
-        if self.user_storage.is_registered(&user) {
-            log!("Staking on EXISTING user");
+
+        if !self.users.is_registered(&user) {
+            self.users.add_new_user(&user);
         }
 
         require!(
-            self.user_storage
-                .get_staked_for(&user)
-                .saturating_add(deposit_amount)
-                .le(&self.config.max_deposit),
+            self.users.get_staked_for(&user) + deposit_amount.as_yoctonear()
+                <= self.config.max_deposit.as_yoctonear(),
             format!(
                 "Surpassed the limit of {} tickets that a user can have",
                 &self.config.max_deposit
@@ -95,10 +77,10 @@ impl Contract {
         // Deposit the tokens in the external pool
 
         // Add the tickets to the pool, but not yet to the user (rollback if failed)
-        self.pool.pool_tickets.saturating_add(deposit_amount);
+        self.pool.pool_tickets = self.pool.pool_tickets.saturating_add(deposit_amount);
 
         // Todo: check validity - We add 100yn to cover the cost of staking in an external pool
-        let deposit = env::attached_deposit(); // might need + 100yn;
+        let deposit = env::attached_deposit().saturating_add(NearToken::from_yoctonear(100)); // might need + 100yn;
 
         Promise::new(self.config.external_pool.clone())
             .function_call(
@@ -122,46 +104,48 @@ impl Contract {
     #[private]
     pub fn deposit_and_stake_callback(
         &mut self,
-        #[callback_result] call_result: Result<NearToken, PromiseError>,
+        #[callback_result] call_result: Result<U128, PromiseError>,
         user: AccountId,
         tickets_amount: NearToken,
     ) {
         // It failed, remove tickets from the pool and return the tokens to the user
         if call_result.is_err() {
-            self.pool.pool_tickets.saturating_sub(tickets_amount);
+            self.pool.pool_tickets = self.pool.pool_tickets.saturating_sub(tickets_amount);
 
             log!("Failed attempt to deposit in the pool, returning tokens to the user");
             Promise::new(user.clone()).transfer(tickets_amount);
+        } else {
+            self.users
+                .stake_tickets_for(&user, tickets_amount.as_yoctonear());
+
+            // It worked, give tickets to the user
+
+            let event_args = json!({
+                "standard": "nep297",
+                "version": "1.0.0",
+                "event": "stake_for_user",
+                "data": {
+                    "user": &user,
+                    "amount": &tickets_amount,
+                },
+            });
+
+            log!("EVENT_JSON:{}", event_args.to_string());
         }
-
-        // It worked, give tickets to the user
-        self.user_storage.stake_tickets_for(&user, tickets_amount);
-
-        let event_args = json!({
-            "standard": "nep297",
-            "version": "1.0.0",
-            "event": "stake_for_user",
-            "data": {
-                "user": &user,
-                "amount": &tickets_amount,
-            },
-        });
-
-        log!("EVENT_JSON:{}", event_args.to_string());
     }
 
     // Unstake --------------------------------------------------------------------
-    pub fn unstake(&mut self, user: AccountId, amount: NearToken) {
+    pub fn unstake(&mut self, user: AccountId, amount: u128) {
         require!(!self.config.emergency, "We will be back soon");
         require!(
-            self.user_storage.is_registered(&user),
+            self.users.is_registered(&user),
             "User not registered in the pool"
         );
 
-        let user_tickets = self.user_storage.get_staked_for(&user);
+        let user_tickets = self.users.get_staked_for(&user);
 
         require!(
-            amount.le(&user_tickets),
+            amount <= user_tickets,
             format!("Amount cant exceed {}", user_tickets)
         );
 
@@ -204,18 +188,15 @@ impl Contract {
             env::prepaid_gas().ge(&Gas::from_tgas(20)),
             "Use at least 20Tgas"
         ); // Todo: Check the Gas amount
-        require!(
-            self.user_storage.is_registered(&user),
-            "User is not registered"
-        );
+        require!(self.users.is_registered(&user), "User is not registered");
 
         //   assert(External.get_current_turn() >= Users.get_withdraw_turn_for(user), "Withdraw not ready")
 
-        let amount: NearToken = self.user_storage.withdraw_all_for(&user);
-        require!(!amount.is_zero(), "Nothing to withdraw");
+        let amount = self.users.withdraw_all_for(&user);
+        require!(amount != 0, "Nothing to withdraw");
 
-        // Tranfer the tokens to the user
-        Promise::new(user.clone()).transfer(amount);
+        // Transfer the tokens to the user
+        Promise::new(user.clone()).transfer(NearToken::from_yoctonear(amount));
 
         let event_args = json!({
             "standard": "nep297",
@@ -242,8 +223,9 @@ impl Contract {
             prize.ge(&self.config.min_to_raffle),
             "Not enough prize to raffle"
         );
+
         // Pick a random ticket as winner
-        let winner: AccountId = self.user_storage.choose_random_winner();
+        let winner: AccountId = self.users.choose_random_winner();
 
         // A part goes to the reserve
         //   const fees: u128 = u128.from(DAO.get_pool_fees())

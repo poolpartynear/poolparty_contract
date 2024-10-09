@@ -7,129 +7,110 @@ pub struct Winner(pub AccountId, pub NearToken, pub u64);
 
 #[near(serializers=[borsh, json])]
 #[derive(Clone)]
-pub struct User {
-    uid: u32,
-    staked_balance: NearToken,
-    unstaked_balance: NearToken,
+pub struct UserBalance {
+    staked: u128,
+    unstaked: u128,
     available_when: u64,
     available: bool,
 }
 
+#[near(serializers=[borsh, json])]
+#[derive(Clone)]
+pub struct UserNode {
+    weight: u128,
+    staked: u128,
+    account_id: AccountId,
+}
+
 #[near(serializers=[borsh, serde])]
-pub struct UserStorage {
+pub struct Users {
+    users: LookupMap<AccountId, UserBalance>,
+
     user_to_uid: LookupMap<AccountId, u32>,
-    uid_to_user: LookupMap<u32, AccountId>,
-    users: LookupMap<AccountId, User>,
-    accum_weights: Vector<NearToken>,
-    user_staked: Vector<NearToken>,
-    total_users: u32,
-    total_staked: NearToken,
-    total_weight: NearToken,
+    tree: Vector<UserNode>,
 }
 
 #[near(serializers = [borsh])]
 #[derive(BorshStorageKey)]
 enum StorageKey {
-    UserToUid,
-    UidToUser,
+    UserToUID,
     Users,
-    AccumWeights,
-    UserStaked,
+    Tree,
 }
 
-impl Default for UserStorage {
+impl Default for Users {
     fn default() -> Self {
         Self {
-            user_to_uid: LookupMap::new(StorageKey::UserToUid),
-            uid_to_user: LookupMap::new(StorageKey::UidToUser),
             users: LookupMap::new(StorageKey::Users),
-            accum_weights: Vector::new(StorageKey::AccumWeights),
-            user_staked: Vector::new(StorageKey::UserStaked),
-            total_users: 0,
-            total_staked: NearToken::from_yoctonear(0),
-            total_weight: NearToken::from_yoctonear(0),
+            user_to_uid: LookupMap::new(StorageKey::UserToUID),
+            tree: Vector::new(StorageKey::Tree),
         }
     }
 }
 
-impl UserStorage {
+impl Users {
+
     pub fn is_registered(&self, user: &AccountId) -> bool {
         self.users.contains_key(user)
     }
 
-    pub fn get_user(&self, user: &AccountId) -> &User {
+    pub fn get_user(&self, user: &AccountId) -> &UserBalance {
         self.users.get(user).expect("User not found!")
     }
 
-    fn get_user_uid(&self, user: &AccountId) -> u32 {
-        let user = self.users.get(user).expect("User not found!");
-        user.uid
+    fn get_user_uid(&self, user: &AccountId) -> &u32 {
+        self.user_to_uid.get(user).expect("User not found!")
     }
 
-    pub fn get_staked_for(&self, user: &AccountId) -> NearToken {
+    pub fn get_staked_for(&self, user: &AccountId) -> u128 {
         let user = self.users.get(user).expect("User not found!");
-        user.staked_balance
+        user.staked
     }
 
-    pub fn get_unstaked_for(&self, user: AccountId) -> NearToken {
+    pub fn get_unstaked_for(&self, user: AccountId) -> u128 {
         let user = self.users.get(&user).expect("User not found!");
-        user.unstaked_balance
-    }
-
-    // export function get_withdraw_turn_for(user: string): u64 {
-    //   const uid: i32 = get_user_uid(user)
-    //   return user_withdraw_turn[uid]
-    // }
-    //
-
-    pub fn get_total_users(&self) -> u32 {
-        self.total_users
+        user.unstaked
     }
 
     // Setters
     fn set_withdraw_turn(&mut self, user: &AccountId) {}
 
     pub(crate) fn add_new_user(&mut self, user: &AccountId) -> u32 {
-        let uid = self.total_users;
+        let uid = self.tree.len() as u32;
 
         self.users.insert(
             user.clone(),
-            User {
-                uid,
-                staked_balance: NearToken::from_yoctonear(0),
-                unstaked_balance: NearToken::from_yoctonear(0),
+            UserBalance {
+                staked: 0,
+                unstaked: 0,
                 available_when: 0,
                 available: false,
             },
         );
 
-        self.total_users += 1;
-
-        //     user_unstaked.push(u128.Zero)
-        //     user_withdraw_turn.push(0)
-        //     accum_weights.push(u128.Zero)
-        //     user_staked.push(u128.Zero)
-        //   }
-
-        self.user_to_uid.set(user.clone(), Some(uid));
-        self.uid_to_user.set(uid, Some(user.clone()));
+        self.tree.push(UserNode {
+            weight: 0,
+            staked: 0,
+            account_id: user.clone(),
+        });
 
         return uid;
     }
 
-    pub(crate) fn stake_tickets_for(&mut self, user: &AccountId, tickets: NearToken) {
-        let uid = self.get_user_uid(&user);
+    pub(crate) fn stake_tickets_for(&mut self, user: &AccountId, tickets: u128) {
+        let mut uid = *self.get_user_uid(&user);
 
         let current_user = self.users.get_mut(user).expect("User not found!");
 
-        current_user.staked_balance = current_user.staked_balance.saturating_add(tickets);
+        current_user.staked = current_user.staked.saturating_add(tickets);
 
-        // accum_weights[uid] = accum_weights[uid] + amount
+        self.tree[uid].staked += tickets;
+ 
+        while uid != 0 {
+            uid = (uid - 1) / 2;
+            self.tree[uid].weight += self.tree[uid].weight.saturating_add(tickets);
+        }
 
-        // while (uid != 0) {
-        //   uid = (uid - 1) / 2
-        //   accum_weights[uid] = accum_weights[uid] + amount
-        // }
     }
 
     pub(crate) fn remove_tickets_from(&mut self, user: &AccountId, amount: NearToken) {}
@@ -138,14 +119,14 @@ impl UserStorage {
         self.remove_tickets_from(user, amount);
     }
 
-    pub(crate) fn withdraw_all_for(&mut self, user: &AccountId) -> NearToken {
+    pub(crate) fn withdraw_all_for(&mut self, user: &AccountId) -> u128 {
         let current_user = self.users.get_mut(user).expect("User not found!");
 
-        let unstaked_balance = current_user.unstaked_balance;
+        let unstaked_balance = current_user.unstaked;
 
-        current_user.unstaked_balance = NearToken::from_near(0);
+        current_user.unstaked = 0;
 
-        if current_user.staked_balance.is_zero() {
+        if current_user.staked == 0 {
             self.user_to_uid.remove(user);
             self.users.remove(user);
         }
@@ -158,9 +139,10 @@ impl UserStorage {
     // TODO: needs to return u182 in range
     // Returns a random number between min (included) and max (excluded)
     //   return u128.from(math.randomBuffer(16)) % (max_exc - min_inc) + min_inc
-    fn random_u128(&self) -> u128 {
+    fn random_u128(&self, min: u128, max: u128) -> u128 {
         let random_seed = env::random_seed(); // TODO: Consider RNG
-        self.as_u128(random_seed.get(..16).unwrap())
+        let random = self.as_u128(random_seed.get(..16).unwrap());
+        random % (max - min) + min
     }
 
     // TODO: Consult with Rust profficient
@@ -184,42 +166,40 @@ impl UserStorage {
     }
 
     pub(crate) fn choose_random_winner(&self) -> AccountId {
-        //         let winning_ticket: u128 = u128.Zero
+        let mut winning_ticket: u128 = 0;
 
-        //   // accum_weights[0] has the total of tickets in the pool
-        //   // user_staked[0] is the tickets of the pool
+        // accum_weights[0] has the total of tickets in the pool
+        // user_staked[0] is the tickets of the pool
 
-        //   if (accum_weights[0] > user_staked[0]) {
-        //     // There are more tickets in the pool than just the reserve
-        //     // Choose a winner excluding the reserve. i.e. Exclude range [0, user_staked[0])
-        //     winning_ticket = random_u128(user_staked[0], accum_weights[0])
-        //   }
+        if self.tree[0].weight > self.tree[0].staked {
+            winning_ticket = self.random_u128(self.tree[0].staked, self.tree[0].weight);
+        }
 
-        //   const uid: i32 = find_user_with_ticket(winning_ticket)
-        //   return uid_to_user.getSome(uid)
+        let uid = self.find_user_with_ticket(winning_ticket);
+        return self.tree[uid].account_id.clone();
     }
 
-    pub fn find_user_with_ticket(&self, winning_ticket: u128) -> u32 {}
+    pub fn find_user_with_ticket(&self, mut winning_ticket: u128) -> u32 {
     // Gets the user with the winning ticket by searching in the binary tree.
     // This function enumerates the users in pre-order. This does NOT affect
     // the probability of winning, which is nbr_tickets_owned / tickets_total.
-    //   let uid: i32 = 0
+      let mut uid: u32 = 0;
 
-    //   while (true) {
-    //     let left: i32 = uid * 2 + 1;
-    //     let right: i32 = uid * 2 + 2;
+      loop {
+        let left: u32 = uid * 2 + 1;
+        let right: u32 = uid * 2 + 2;
 
-    //     if (winning_ticket < user_staked[uid]) {
-    //       return uid
-    //     }
+        if winning_ticket < self.tree[uid].staked {
+          return uid
+        }
 
-    //     if (winning_ticket < user_staked[uid] + accum_weights[left]) {
-    //       winning_ticket = winning_ticket - user_staked[uid]
-    //       uid = left
-    //     } else {
-    //       winning_ticket = winning_ticket - user_staked[uid] - accum_weights[left]
-    //       uid = right
-    //     }
-    //   }
-    // }
+        if winning_ticket < self.tree[uid].staked + self.tree[left].weight {
+          winning_ticket = winning_ticket - self.tree[uid].staked;
+          uid = left
+        } else {
+          winning_ticket = winning_ticket - self.tree[uid].staked - self.tree[uid].staked;
+          uid = right
+        }
+      }
+    }
 }

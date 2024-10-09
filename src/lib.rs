@@ -2,7 +2,7 @@
 use near_sdk::{
     env, json_types::U64, log, near, store::Vector, AccountId, NearToken, PanicOnDefault,
 };
-use users::{UserStorage, Winner};
+use users::{Users, Winner};
 
 // The raffle happens once per day
 const RAFFLE_WAIT: U64 = U64(86400000000000);
@@ -83,7 +83,7 @@ pub struct Config {
 pub struct Contract {
     config: Config,
     pool: Pool,
-    user_storage: UserStorage,
+    users: Users,
 }
 
 // Implement the contract structure
@@ -114,7 +114,7 @@ impl Contract {
                 emergency: false,
             },
             pool: Pool::default(),
-            user_storage: UserStorage::default(),
+            users: Users::default(),
         }
     }
 
