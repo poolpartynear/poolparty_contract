@@ -49,7 +49,6 @@ impl Default for Users {
 }
 
 impl Users {
-
     pub fn is_registered(&self, user: &AccountId) -> bool {
         self.users.contains_key(user)
     }
@@ -105,12 +104,11 @@ impl Users {
         current_user.staked = current_user.staked.saturating_add(tickets);
 
         self.tree[uid].staked += tickets;
- 
+
         while uid != 0 {
             uid = (uid - 1) / 2;
             self.tree[uid].weight += self.tree[uid].weight.saturating_add(tickets);
         }
-
     }
 
     pub(crate) fn remove_tickets_from(&mut self, user: &AccountId, amount: NearToken) {}
@@ -180,26 +178,26 @@ impl Users {
     }
 
     pub fn find_user_with_ticket(&self, mut winning_ticket: u128) -> u32 {
-    // Gets the user with the winning ticket by searching in the binary tree.
-    // This function enumerates the users in pre-order. This does NOT affect
-    // the probability of winning, which is nbr_tickets_owned / tickets_total.
-      let mut uid: u32 = 0;
+        // Gets the user with the winning ticket by searching in the binary tree.
+        // This function enumerates the users in pre-order. This does NOT affect
+        // the probability of winning, which is nbr_tickets_owned / tickets_total.
+        let mut uid: u32 = 0;
 
-      loop {
-        let left: u32 = uid * 2 + 1;
-        let right: u32 = uid * 2 + 2;
+        loop {
+            let left: u32 = uid * 2 + 1;
+            let right: u32 = uid * 2 + 2;
 
-        if winning_ticket < self.tree[uid].staked {
-          return uid
+            if winning_ticket < self.tree[uid].staked {
+                return uid;
+            }
+
+            if winning_ticket < self.tree[uid].staked + self.tree[left].weight {
+                winning_ticket = winning_ticket - self.tree[uid].staked;
+                uid = left
+            } else {
+                winning_ticket = winning_ticket - self.tree[uid].staked - self.tree[uid].staked;
+                uid = right
+            }
         }
-
-        if winning_ticket < self.tree[uid].staked + self.tree[left].weight {
-          winning_ticket = winning_ticket - self.tree[uid].staked;
-          uid = left
-        } else {
-          winning_ticket = winning_ticket - self.tree[uid].staked - self.tree[uid].staked;
-          uid = right
-        }
-      }
     }
 }
