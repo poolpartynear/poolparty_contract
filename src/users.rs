@@ -62,12 +62,12 @@ impl Users {
     }
 
     pub fn get_staked_for(&self, user: &AccountId) -> u128 {
-        let user = self.users.get(user).expect("User not found!");
+        let user = self.get_user(&user);
         user.staked
     }
 
     pub fn get_unstaked_for(&self, user: AccountId) -> u128 {
-        let user = self.users.get(&user).expect("User not found!");
+        let user = self.get_user(&user);
         user.unstaked
     }
 
@@ -111,10 +111,24 @@ impl Users {
         }
     }
 
-    pub(crate) fn remove_tickets_from(&mut self, user: &AccountId, amount: NearToken) {}
+    pub(crate) fn remove_tickets_from(&mut self, user: &AccountId, amount: u128) {
+        let mut uid = *self.get_user_uid(user);
 
-    fn unstake_tickets_for(&mut self, user: &AccountId, amount: NearToken) {
-        self.remove_tickets_from(user, amount);
+        self.tree[uid].staked += amount;
+
+        while uid != 0 {
+            uid = (uid - 1) / 2;
+            self.tree[uid].weight -= self.tree[uid].weight.saturating_sub(amount);
+        }
+    }
+
+    pub(crate) fn unstake_tickets_for(&mut self, user: &AccountId, amount: NearToken) {
+        self.remove_tickets_from(user, amount.as_yoctonear());
+
+        let current_user = self.users.get_mut(user).expect("User not found!");
+
+        current_user.staked += amount.as_yoctonear();
+        current_user.unstaked += amount.as_yoctonear();
     }
 
     pub(crate) fn withdraw_all_for(&mut self, user: &AccountId) -> u128 {

@@ -135,7 +135,7 @@ impl Contract {
     }
 
     // Unstake --------------------------------------------------------------------
-    pub fn unstake(&mut self, user: AccountId, amount: u128) {
+    pub fn unstake(&mut self, user: AccountId, amount: NearToken) {
         require!(!self.config.emergency, "We will be back soon");
         require!(
             self.users.is_registered(&user),
@@ -145,7 +145,7 @@ impl Contract {
         let user_tickets = self.users.get_staked_for(&user);
 
         require!(
-            amount <= user_tickets,
+            amount.as_yoctonear() <= user_tickets,
             format!("Amount cant exceed {}", user_tickets)
         );
 
@@ -160,10 +160,8 @@ impl Contract {
         //   // the user will be able to withdraw in the next withdraw_turn
         //   Users.set_withdraw_turn(user, External.get_next_withdraw_turn())
 
-        //   // update user info
-        //   Users.unstake_tickets_for(user, amount)
-        //
-        //
+        // update user info
+        self.users.unstake_tickets_for(&user, amount);
 
         let event_args = json!({
             "standard": "nep297",
