@@ -2,7 +2,11 @@
 use near_sdk::{
     env, json_types::U64, log, near, store::Vector, AccountId, NearToken, PanicOnDefault,
 };
-use users::{Users, Winner};
+use pool::Pool;
+use users::Users;
+
+pub const NO_ARGS: Vec<u8> = vec![];
+pub const NO_DEPOSIT: NearToken = NearToken::from_near(0);
 
 // The raffle happens once per day
 const RAFFLE_WAIT: U64 = U64(86400000000000);
@@ -30,40 +34,9 @@ const MAX_TO_RAFFLE: NearToken = NearToken::from_near(50);
 
 pub mod pool;
 pub mod users;
+pub mod external;
 
-#[near(serializers=[borsh, serde])]
-#[derive(Clone)]
-pub struct Pool {
-    pub total_staked: NearToken,
-    pub waiting_to_unstake: NearToken,
-    pub reserve: NearToken,
-    pub prize_pool: NearToken,
-    pub last_prize_update: u64,
-    pub next_raffle: u64,
-    pub withdraw_ready: bool,
-    pub pool_tickets: NearToken,
-    pub total_users: u64,
-    pub winners: Vec<Winner>,
-}
-
-impl Default for Pool {
-    fn default() -> Self {
-        Self {
-            total_staked: NearToken::from_yoctonear(0),
-            waiting_to_unstake: NearToken::from_yoctonear(0),
-            reserve: NearToken::from_yoctonear(0),
-            prize_pool: NearToken::from_yoctonear(0),
-            last_prize_update: 0,
-            next_raffle: 0,
-            withdraw_ready: false,
-            pool_tickets: NearToken::from_yoctonear(0),
-            total_users: 0,
-            winners: vec![],
-        }
-    }
-}
-
-#[near(serializers=[borsh, serde])]
+#[near(serializers=[borsh, json])]
 #[derive(Clone)]
 pub struct Config {
     external_pool: AccountId,
@@ -74,15 +47,15 @@ pub struct Config {
     max_deposit: NearToken,
     epochs_wait: u64,
     time_between_raffles: u64,
-    emergency: bool,
+   pub emergency: bool,
 }
 
 // Define the contract structure
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Contract {
-    config: Config,
-    pool: Pool,
+    pub config: Config,
+    pub pool: Pool,
     users: Users,
 }
 
@@ -125,6 +98,10 @@ impl Contract {
 
     pub fn get_time_between_raffles(&self) -> U64 {
         U64(self.config.time_between_raffles)
+    }
+
+    pub fn is_emergency(&self) -> bool {
+        self.config.emergency
     }
 
     pub fn get_config(&self) -> Config {

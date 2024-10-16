@@ -12,6 +12,7 @@ pub struct UserBalance {
     unstaked: u128,
     available_when: u64,
     available: bool,
+    withdraw_turn: Option<u64>,
 }
 
 #[near(serializers=[borsh, json])]
@@ -25,7 +26,6 @@ pub struct UserNode {
 #[near(serializers=[borsh, serde])]
 pub struct Users {
     users: LookupMap<AccountId, UserBalance>,
-
     user_to_uid: LookupMap<AccountId, u32>,
     tree: Vector<UserNode>,
 }
@@ -72,7 +72,7 @@ impl Users {
     }
 
     // Setters
-    fn set_withdraw_turn(&mut self, user: &AccountId) {}
+    // fn set_withdraw_turn(&mut self, user: &AccountId) {}
 
     pub(crate) fn add_new_user(&mut self, user: &AccountId) -> u32 {
         let uid = self.tree.len() as u32;
@@ -84,6 +84,7 @@ impl Users {
                 unstaked: 0,
                 available_when: 0,
                 available: false,
+                withdraw_turn: None,
             },
         );
 

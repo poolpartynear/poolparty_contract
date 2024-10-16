@@ -1,163 +1,154 @@
-// import { storage, context, u128, ContractPromise, logging } from "near-sdk-as";
-// import { TGAS, get_callback_result } from './aux'
-// import * as DAO from './dao'
-// import * as Pool from './pool'
+use crate::*;
+use near_sdk::{require, serde_json::json, Gas, Promise, PromiseError};
 
+#[near]
+impl Contract {
+    // Semaphore to interact with external pool
+    pub fn is_interacting(&self) -> bool {
+        self.pool.is_interacting
+    }
 
-// // Semaphore to interact with external pool
-// function is_interacting(): bool {
-//   return storage.getPrimitive<bool>('interacting', false)
-// }
+    pub fn start_interacting(&mut self) {
+        require!(
+            !self.is_interacting(),
+            "Already interacting with the staking contract"
+        );
 
-// export function start_interacting(): void {
-//   assert(!is_interacting(),
-//     "Already interacting with the validator")
+        self.pool.is_interacting = true;
+    }
 
-//   storage.set<bool>('interacting', true)
-// }
+    pub fn stop_interacting(&mut self) {
+        self.pool.is_interacting = false;
+    }
 
-// export function stop_interacting(): void {
-//   storage.set<bool>('interacting', false)
-// }
+    // TODO
+    // pub fn get_current_turn(&self)-> u64 {
+    //   // The current_turn increases by 1 each time we withdraw from external
+    //   return storage.getPrimitive<u64>('current_turn', 0)
+    // }
 
-// // Getters - Setters
-// export function get_to_unstake(): u128 {
-//   // Amount of tickets waiting to be unstaked
-//   if (storage.contains('to_unstake')) { return storage.getSome<u128>('to_unstake') }
-//   return u128.Zero
-// }
+    pub fn get_next_withdraw_turn(&self) -> u64 {
+        // The withdraw_turn increases by 1 each time we unstake from external.
+        // When a user unstakes, we asign them a withdraw turn. The user can
+        // withdraw when current_turn is equal to their asigned turn
+        self.pool.next_withdraw_turn
+    }
 
-// export function set_to_unstake(tickets: u128): void {
-//   storage.set<u128>('to_unstake', tickets)
-// }
+    pub fn get_next_withdraw_epoch(&self) -> u64 {
+        self.pool.next_withdraw_epoch
+    }
 
-// export function get_current_turn(): u64 {
-//   // The current_turn increases by 1 each time we withdraw from external
-//   return storage.getPrimitive<u64>('current_turn', 0)
-// }
+    pub fn can_withdraw_external(&self) -> bool {
+        if env::epoch_height() >= self.pool.next_withdraw_epoch {
+            return true;
+        } else {
+            return false;
+        }
+    }
 
-// export function get_next_withdraw_turn(): u64 {
-//   // The withdraw_turn increases by 1 each time we unstake from external.
-//   // When a user unstakes, we asign them a withdraw turn. The user can
-//   // withdraw when current_turn is equal to their asigned turn
-//   return storage.getPrimitive<u64>('next_withdraw_turn', 1)
-// }
+    // Unstake external -----------------------------------------------------------
+    pub fn unstake_external(&mut self) -> Promise {
+        require!(env::prepaid_gas() >= Gas::from_tgas(300), "Not enough gas"); // Todo: evaluate gas
 
-// function get_next_withdraw_epoch(): u64 {
-//   return storage.getPrimitive<u64>('next_withdraw_epoch', context.epochHeight)
-// }
+        require!(
+            self.pool.to_unstake > NearToken::from_yoctonear(0),
+            "Nothing to unstake!"
+        );
+        // Check if we are already interacting
+        self.start_interacting();
 
-// export function can_withdraw_external(): bool {
-//   return context.epochHeight >= get_next_withdraw_epoch()
-// }
+        // TODO: If someone wants to unstake, they will get the next turn
+        //  self.users.(user, External.get_next_withdraw_turn());
 
+        Promise::new(self.config.external_pool.clone())
+            .function_call(
+                "unstake".to_string(),
+                json!({ "amount": self.pool.to_unstake.as_yoctonear()})
+                    .to_string()
+                    .into_bytes(),
+                NO_DEPOSIT,
+                Gas::from_tgas(120),
+            )
+            .then(
+                Promise::new(env::current_account_id()).function_call(
+                    "unstake_external_callback".to_string(),
+                    json!({ "amount": self.pool.to_unstake})
+                        .to_string()
+                        .into_bytes(),
+                    NO_DEPOSIT,
+                    Gas::from_tgas(45), // Todo: Check the Gas amount
+                ),
+            )
+    }
 
-// // Interact external ----------------------------------------------------------
-// export function interact_external(): void {
+    #[private]
+    pub fn unstake_external_callback(
+        &mut self,
+        amount: NearToken,
+        #[callback_result] call_result: Result<NearToken, PromiseError>,
+    ) {
+        if call_result.is_err() {
+            // Rollback next_withdraw_turn
+            self.pool.next_withdraw_turn -= 1;
+        } else {
+            self.pool.pool_tickets.saturating_sub(amount);
+            self.pool.next_withdraw_epoch = env::epoch_height() + self.config.epochs_wait;
+            // TODO: Increase the turn?
+            // TODO: Ask for bellow
+            // next time we want to withdraw
+            //     storage.set<string>('external_action', 'withdraw')
 
-//   assert(!DAO.is_emergency(), 'We will be back soon')
+            self.pool.to_unstake = self.pool.to_unstake.saturating_sub(amount);
+        }
+        self.stop_interacting();
+    }
 
-//   const external_action: string = storage.getPrimitive<string>(
-//     'external_action', 'unstake'
-//   )
+    // Withdraw external ----------------------------------------------------------
+    pub fn withdraw_external(&mut self) -> Promise {
+        require!(env::prepaid_gas() >= Gas::from_tgas(300), "Not enough gas"); // TODO: evaluate
 
-//   if (external_action == 'withdraw') {
-//     withdraw_external()
-//   } else {
-//     unstake_external()
-//   }
-// }
+        // Check that 4 epochs passed from the last unstake from external
+        require!(
+            env::epoch_height() >= self.pool.next_withdraw_epoch,
+            "Not enough time has passed"
+        );
 
-// // Withdraw external ----------------------------------------------------------
-// function withdraw_external(): void {
-//   assert(context.prepaidGas >= 300 * TGAS, "Not enough gas")
+        // Check if we are already interacting, if not, set it to true()
+        self.start_interacting();
 
-//   // Check that 4 epochs passed from the last unstake from external
-//   const withdraw_epoch: u64 = get_next_withdraw_epoch()
-//   assert(context.epochHeight >= withdraw_epoch, "Not enough time has passed")
+        // Withdraw tokens from external pool
 
-//   // Check if we are already interacting, if not, set it to true()
-//   start_interacting()
+        Promise::new(self.config.external_pool.clone())
+            .function_call(
+                "withdraw_all".to_string(),
+                NO_ARGS,
+                NO_DEPOSIT,
+                Gas::from_tgas(120), // Todo: Check the Gas amount
+            )
+            .then(Promise::new(env::current_account_id()).function_call(
+                "withdraw_external_callback".to_string(),
+                NO_ARGS,
+                NO_DEPOSIT,
+                Gas::from_tgas(120), // Todo: Check the Gas amount
+            ))
+    }
 
-//   // withdraw money from external pool
-//   const promise = ContractPromise.create(DAO.get_external_pool(), "withdraw_all", "",
-//     120 * TGAS, u128.Zero)
-//   const callbackPromise = promise.then(context.contractName, "withdraw_external_callback",
-//     "", 120 * TGAS)
-//   callbackPromise.returnAsResult()
-// }
+    #[private]
+    pub fn withdraw_external_callback(
+        &mut self,
+        #[callback_result] call_result: Result<(), PromiseError>,
+    ) -> bool {
+        self.stop_interacting();
 
-// export function withdraw_external_callback(): bool {
-//   const response = get_callback_result()
-
-//   if (response.status == 1) {
-//     // Everything worked, next time we want to unstake
-//     storage.set<string>('external_action', 'unstake')
-//     storage.set<u64>('current_turn', get_current_turn() + 1)
-//   }
-
-//   stop_interacting()
-//   return true
-// }
-
-
-// // Unstake external -----------------------------------------------------------
-// @nearBindgen
-// class AmountArg {
-//   constructor(public amount: u128) { }
-// }
-
-// function unstake_external(): void {
-//   assert(context.prepaidGas >= 300 * TGAS, "Not enough gas")
-
-//   const to_unstake: u128 = get_to_unstake()
-
-//   if (to_unstake == u128.Zero) {
-//     logging.log("Nobody asked to unstake their tickets, we will wait")
-//   } else {
-//     // Check if we are already interacting, if not, set it to true
-//     start_interacting()
-
-//     // There are tickets to unstake  
-//     const args: AmountArg = new AmountArg(to_unstake)
-
-//     // If someone wants to unstake, they will get the next turn
-//     storage.set<u64>('next_withdraw_turn', get_next_withdraw_turn() + 1)
-
-//     const promise = ContractPromise.create(
-//       DAO.get_external_pool(), "unstake", args.encode(),
-//       120 * TGAS, u128.Zero)
-
-//     const callbackPromise = promise.then(
-//       context.contractName, "unstake_external_callback",
-//       args.encode(), 120 * TGAS
-//     )
-
-//     callbackPromise.returnAsResult();
-//   }
-// }
-
-// export function unstake_external_callback(amount: u128): bool {
-//   const response = get_callback_result()
-
-//   if (response.status == 1) {
-//     // update the number of tickets in the pool
-//     Pool.set_tickets(Pool.get_tickets() - amount)
-
-//     // update the epoch in which we can withdraw
-//     storage.set<u64>('next_withdraw_epoch', context.epochHeight + DAO.get_epoch_wait())
-
-//     // next time we want to withdraw
-//     storage.set<string>('external_action', 'withdraw')
-
-//     // Remove the amount we unstaked
-//     set_to_unstake(get_to_unstake() - amount)
-//   } else {
-//     // Rollback next_withdraw_turn
-//     storage.set<u64>('next_withdraw_turn', get_next_withdraw_turn() - 1)
-//   }
-
-//   stop_interacting()
-
-//   return true
-// }
+        if call_result.is_err() {
+            // Rollback next_withdraw_epoch
+            self.pool.next_withdraw_epoch -= 1;
+            false
+        } else {
+            // TODO ASK
+            //  storage.set<string>('external_action', 'unstake')
+            self.pool.next_withdraw_turn += 1;
+            true
+        }
+    }
+}

@@ -2,14 +2,50 @@ use crate::*;
 use near_sdk::{json_types::U128, near, require, serde_json::json, Gas, Promise, PromiseError};
 use users::Winner;
 
-const NO_ARGS: Vec<u8> = vec![];
-const NO_DEPOSIT: NearToken = NearToken::from_near(0);
 const PRIZE_UPDATE_INTERVAL: u64 = 10000000000;
+
+#[near(serializers=[borsh, json])]
+#[derive(Clone)]
+pub struct Pool {
+    pub total_staked: NearToken,
+    pub to_unstake: NearToken,
+    pub reserve: NearToken,
+    pub prize_pool: NearToken,
+    pub last_prize_update: u64,
+    pub next_raffle: u64,
+    pub withdraw_ready: bool,
+    pub pool_tickets: NearToken,
+    pub total_users: u64,
+    pub winners: Vec<Winner>,
+    pub is_interacting: bool,
+    pub next_withdraw_turn: u64,
+    pub next_withdraw_epoch: u64
+}
+
+impl Default for Pool {
+    fn default() -> Self {
+        Self {
+            total_staked: NearToken::from_yoctonear(0),
+            to_unstake: NearToken::from_yoctonear(0),
+            reserve: NearToken::from_yoctonear(0),
+            prize_pool: NearToken::from_yoctonear(0),
+            last_prize_update: 0,
+            next_raffle: 0,
+            withdraw_ready: false,
+            pool_tickets: NearToken::from_yoctonear(0),
+            total_users: 0,
+            winners: vec![],
+            is_interacting: false,
+            next_withdraw_turn: 0,
+            next_withdraw_epoch: 0
+        }
+    }
+}
 
 #[near]
 impl Contract {
-    pub fn get_pool_info(&self) -> Pool {
-        self.pool.clone()
+    pub fn get_pool_info(&self) -> &Pool {
+        &self.pool
     }
 
     pub fn get_number_of_winners(&self) -> u32 {
@@ -30,8 +66,7 @@ impl Contract {
             )
         );
 
-        self.pool
-            .winners
+        self.pool.winners
             .iter()
             .skip(from as usize)
             .take(limit as usize)
@@ -143,19 +178,20 @@ impl Contract {
         );
 
         let user_tickets = self.users.get_staked_for(&user);
+        let mut unstake_amount = amount;
 
         require!(
-            amount.as_yoctonear() <= user_tickets,
+            unstake_amount.as_yoctonear() <= user_tickets,
             format!("Amount cant exceed {}", user_tickets)
         );
 
-        //   const withdraw_all: bool = (user_tickets - amount) < DAO.get_min_deposit();
-        //   if (withdraw_all) {
-        //     amount = user_tickets
-        //   }
+        let withdraw_all: bool = (user_tickets - amount.as_yoctonear()) < self.config.min_deposit.as_yoctonear();
+        if withdraw_all {
+            unstake_amount = NearToken::from_yoctonear(user_tickets);
+          }
 
-        //   // add to the amount we will unstake from external next time
-        //   External.set_to_unstake(External.get_to_unstake() + amount)
+        // add to the amount we will unstake from external next time
+        self.pool.to_unstake.saturating_add(amount);
 
         //   // the user will be able to withdraw in the next withdraw_turn
         //   Users.set_withdraw_turn(user, External.get_next_withdraw_turn())
@@ -169,8 +205,8 @@ impl Contract {
             "event": "unstake",
             "data": {
                 "user": user,
-                "amount": amount,
-                // "all": withdraw_all,
+                "amount": unstake_amount,
+                "all": withdraw_all,
             },
         });
 
@@ -238,11 +274,12 @@ impl Contract {
 
         //   set_tickets(get_tickets() + prize)
 
-        //   logging.log(
+        // TODO: Emit events 
+        //  log!(
         //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "prize-user", "data": {"pool": "${context.contractName}", "user": "${winner}", "amount": "${user_prize}"}}`
         //   );
 
-        //   logging.log(
+        //  log!(
         //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "prize-reserve", "data": {"pool": "${context.contractName}", "user": "${guardian}", "amount": "${reserve_prize}"}}`
         //   );
 
@@ -312,7 +349,8 @@ impl Contract {
             prize = self.config.max_to_raffle
         }
 
-        // todo: emit event
+        // Todo: emit event
+
         // Update prize_pool
         log!("New prize: {}", prize.exact_amount_display());
         self.pool.prize_pool = prize;
