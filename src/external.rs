@@ -96,7 +96,7 @@ impl Contract {
             // TODO: Increase the turn?
             // TODO: Ask for bellow
             // next time we want to withdraw
-            //     storage.set<string>('external_action', 'withdraw')
+            // storage.set<string>('external_action', 'withdraw')
 
             self.pool.to_unstake = self.pool.to_unstake.saturating_sub(amount);
         }
@@ -146,7 +146,7 @@ impl Contract {
             false
         } else {
             // TODO ASK
-            //  storage.set<string>('external_action', 'unstake')
+            // storage.set<string>('external_action', 'unstake')
             self.pool.next_withdraw_turn += 1;
             true
         }

@@ -19,7 +19,7 @@ pub struct Pool {
     pub winners: Vec<Winner>,
     pub is_interacting: bool,
     pub next_withdraw_turn: u64,
-    pub next_withdraw_epoch: u64
+    pub next_withdraw_epoch: u64,
 }
 
 impl Default for Pool {
@@ -37,7 +37,7 @@ impl Default for Pool {
             winners: vec![],
             is_interacting: false,
             next_withdraw_turn: 0,
-            next_withdraw_epoch: 0
+            next_withdraw_epoch: 0,
         }
     }
 }
@@ -66,7 +66,8 @@ impl Contract {
             )
         );
 
-        self.pool.winners
+        self.pool
+            .winners
             .iter()
             .skip(from as usize)
             .take(limit as usize)
@@ -185,10 +186,11 @@ impl Contract {
             format!("Amount cant exceed {}", user_tickets)
         );
 
-        let withdraw_all: bool = (user_tickets - amount.as_yoctonear()) < self.config.min_deposit.as_yoctonear();
+        let withdraw_all: bool =
+            (user_tickets - amount.as_yoctonear()) < self.config.min_deposit.as_yoctonear();
         if withdraw_all {
             unstake_amount = NearToken::from_yoctonear(user_tickets);
-          }
+        }
 
         // add to the amount we will unstake from external next time
         self.pool.to_unstake.saturating_add(amount);
@@ -261,20 +263,10 @@ impl Contract {
         // Pick a random ticket as winner
         let winner: AccountId = self.users.choose_random_winner();
 
-        // A part goes to the reserve
-        //   const fees: u128 = u128.from(DAO.get_pool_fees())
-        //   const reserve_prize: u128 = (prize * fees) / u128.from(100)
+        self.users.stake_tickets_for(&winner, prize.as_yoctonear());
+        self.pool.pool_tickets.saturating_add(prize);
 
-        //   const guardian: string = DAO.get_guardian()
-        //   Users.stake_tickets_for(guardian, reserve_prize)
-
-        // We give most to the user
-        //   const user_prize: u128 = prize - reserve_prize
-        //   Users.stake_tickets_for(winner, user_prize)
-
-        //   set_tickets(get_tickets() + prize)
-
-        // TODO: Emit events 
+        // TODO: Emit events
         //  log!(
         //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "prize-user", "data": {"pool": "${context.contractName}", "user": "${winner}", "amount": "${user_prize}"}}`
         //   );
