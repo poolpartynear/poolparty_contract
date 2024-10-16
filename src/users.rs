@@ -210,7 +210,7 @@ impl Users {
                 winning_ticket = winning_ticket - self.tree[uid].staked;
                 uid = left
             } else {
-                winning_ticket = winning_ticket - self.tree[uid].staked - self.tree[uid].staked;
+                winning_ticket = winning_ticket - self.tree[uid].staked - self.tree[left].staked;
                 uid = right
             }
         }
