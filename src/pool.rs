@@ -2,20 +2,17 @@ use crate::*;
 use near_sdk::{json_types::U128, near, require, serde_json::json, Gas, Promise, PromiseError};
 use users::Winner;
 
-const PRIZE_UPDATE_INTERVAL: u64 = 10000000000;
+const PRIZE_UPDATE_INTERVAL: u64 = 60000;
 
 #[near(serializers=[borsh, json])]
 #[derive(Clone)]
 pub struct Pool {
-    pub total_staked: NearToken,
     pub to_unstake: NearToken,
-    pub reserve: NearToken,
     pub prize_pool: NearToken,
     pub last_prize_update: u64,
     pub next_raffle: u64,
     pub withdraw_ready: bool,
     pub pool_tickets: NearToken,
-    pub total_users: u64,
     pub winners: Vec<Winner>,
     pub is_interacting: bool,
     pub next_withdraw_turn: u64,
@@ -25,15 +22,12 @@ pub struct Pool {
 impl Default for Pool {
     fn default() -> Self {
         Self {
-            total_staked: NearToken::from_yoctonear(0),
             to_unstake: NearToken::from_yoctonear(0),
-            reserve: NearToken::from_yoctonear(0),
             prize_pool: NearToken::from_yoctonear(0),
             last_prize_update: 0,
             next_raffle: 0,
             withdraw_ready: false,
             pool_tickets: NearToken::from_yoctonear(0),
-            total_users: 0,
             winners: vec![],
             is_interacting: false,
             next_withdraw_turn: 0,
@@ -97,12 +91,12 @@ impl Contract {
 
         let user = env::predecessor_account_id();
 
-        if !self.users.is_registered(&user) {
-            self.users.add_new_user(&user);
+        if !self.is_registered(&user) {
+            self.add_new_user(&user);
         }
 
         require!(
-            self.users.get_staked_for(&user) + deposit_amount.as_yoctonear()
+            self.get_staked_for(&user).0 + deposit_amount.as_yoctonear()
                 <= self.config.max_deposit.as_yoctonear(),
             format!(
                 "Surpassed the limit of {} tickets that a user can have",
@@ -151,8 +145,7 @@ impl Contract {
             log!("Failed attempt to deposit in the pool, returning tokens to the user");
             Promise::new(user.clone()).transfer(tickets_amount);
         } else {
-            self.users
-                .stake_tickets_for(&user, tickets_amount.as_yoctonear());
+            self.stake_tickets_for(&user, tickets_amount.as_yoctonear());
 
             // It worked, give tickets to the user
 
@@ -171,14 +164,13 @@ impl Contract {
     }
 
     // Unstake --------------------------------------------------------------------
-    pub fn unstake(&mut self, user: AccountId, amount: NearToken) {
-        require!(!self.config.emergency, "We will be back soon");
-        require!(
-            self.users.is_registered(&user),
-            "User not registered in the pool"
-        );
+    pub fn unstake(&mut self, amount: NearToken) {
+        let user = env::predecessor_account_id();
 
-        let user_tickets = self.users.get_staked_for(&user);
+        require!(!self.config.emergency, "We will be back soon");
+        require!(self.is_registered(&user), "User not registered in the pool");
+
+        let user_tickets = self.get_staked_for(&user).0;
         let mut unstake_amount = amount;
 
         require!(
@@ -193,13 +185,13 @@ impl Contract {
         }
 
         // add to the amount we will unstake from external next time
-        self.pool.to_unstake.saturating_add(amount);
+        self.pool.to_unstake = self.pool.to_unstake.saturating_add(amount);
 
-        //   // the user will be able to withdraw in the next withdraw_turn
-        //   Users.set_withdraw_turn(user, External.get_next_withdraw_turn())
+        // the user will be able to withdraw in the next withdraw_turn
+        self.set_withdraw_turn_for(&user, self.get_next_withdraw_turn());
 
         // update user info
-        self.users.unstake_tickets_for(&user, amount);
+        self.unstake_tickets_for(&user, amount);
 
         let event_args = json!({
             "standard": "nep297",
@@ -224,11 +216,11 @@ impl Contract {
             env::prepaid_gas().ge(&Gas::from_tgas(20)),
             "Use at least 20Tgas"
         ); // Todo: Check the Gas amount
-        require!(self.users.is_registered(&user), "User is not registered");
+        require!(self.is_registered(&user), "User is not registered");
 
-        //   assert(External.get_current_turn() >= Users.get_withdraw_turn_for(user), "Withdraw not ready")
+        require!(self.get_withdraw_turn() >= self.get_withdraw_turn_for(&user).unwrap(), "Withdraw not ready");
 
-        let amount = self.users.withdraw_all_for(&user);
+        let amount = self.withdraw_all_for(&user);
         require!(amount != 0, "Nothing to withdraw");
 
         // Transfer the tokens to the user
@@ -261,9 +253,9 @@ impl Contract {
         );
 
         // Pick a random ticket as winner
-        let winner: AccountId = self.users.choose_random_winner();
+        let winner: AccountId = self.choose_random_winner();
 
-        self.users.stake_tickets_for(&winner, prize.as_yoctonear());
+        self.stake_tickets_for(&winner, prize.as_yoctonear());
         self.pool.pool_tickets.saturating_add(prize);
 
         // TODO: Emit events
@@ -271,9 +263,6 @@ impl Contract {
         //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "prize-user", "data": {"pool": "${context.contractName}", "user": "${winner}", "amount": "${user_prize}"}}`
         //   );
 
-        //  log!(
-        //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "prize-reserve", "data": {"pool": "${context.contractName}", "user": "${guardian}", "amount": "${reserve_prize}"}}`
-        //   );
 
         // Set next raffle time
         self.pool.next_raffle = now + self.config.time_between_raffles;
@@ -295,8 +284,10 @@ impl Contract {
         let now: u64 = env::block_timestamp_ms();
         let last_update: u64 = self.pool.last_prize_update;
 
+        log!("Last update: {}\n now: {}", last_update + PRIZE_UPDATE_INTERVAL, now);
+
         require!(
-            now.ge(&(last_update + PRIZE_UPDATE_INTERVAL)),
+            now.ge(&(last_update + 100)),
             "Not enough time has passed"
         );
 

@@ -21,11 +21,9 @@ impl Contract {
         self.pool.is_interacting = false;
     }
 
-    // TODO
-    // pub fn get_current_turn(&self)-> u64 {
-    //   // The current_turn increases by 1 each time we withdraw from external
-    //   return storage.getPrimitive<u64>('current_turn', 0)
-    // }
+    pub fn get_withdraw_turn(&self) -> u64 {
+        self.pool.next_withdraw_turn
+    }
 
     pub fn get_next_withdraw_turn(&self) -> u64 {
         // The withdraw_turn increases by 1 each time we unstake from external.
@@ -93,7 +91,7 @@ impl Contract {
         } else {
             self.pool.pool_tickets.saturating_sub(amount);
             self.pool.next_withdraw_epoch = env::epoch_height() + self.config.epochs_wait;
-            // TODO: Increase the turn?
+            self.pool.next_withdraw_turn += 1;
             // TODO: Ask for bellow
             // next time we want to withdraw
             // storage.set<string>('external_action', 'withdraw')

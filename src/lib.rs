@@ -8,12 +8,8 @@ use users::Users;
 pub const NO_ARGS: Vec<u8> = vec![];
 pub const NO_DEPOSIT: NearToken = NearToken::from_near(0);
 
-// The raffle happens once per day
-const RAFFLE_WAIT: U64 = U64(86400000000000);
-
-// If the tree gets too high (>13 levels) traversing it gets expensive,
-// lets cap the max number of users, so traversing the tree is at max 90TGAS
-// const MAX_USERS: i32 = 8191;
+// The raffle happens once per day 86400000
+const RAFFLE_WAIT: U64 = U64(300000);
 
 // The users cannot have more than a certain amount of NEARs,
 // to limit whale's size in the pool. Default: A thousand NEARs
@@ -27,7 +23,7 @@ const MIN_DEPOSIT: NearToken = NearToken::from_near(1);
 const EPOCHS_WAIT: U64 = U64(4);
 
 // Minimum amount to Raffle (0.1 NEAR)
-const MIN_TO_RAFFLE: NearToken = NearToken::from_millinear(1);
+const MIN_TO_RAFFLE: NearToken = NearToken::from_yoctonear(1);
 
 // Maximum amount to Raffle (50 NEAR)
 const MAX_TO_RAFFLE: NearToken = NearToken::from_near(50);
@@ -40,7 +36,6 @@ pub mod external;
 #[derive(Clone)]
 pub struct Config {
     external_pool: AccountId,
-    next_raffle_timestamp: u64,
     min_to_raffle: NearToken,
     max_to_raffle: NearToken,
     min_deposit: NearToken,
@@ -66,7 +61,6 @@ impl Contract {
     #[init]
     pub fn new(
         external_pool: AccountId,
-        first_raffle: U64,
         min_to_raffle: Option<NearToken>,
         max_to_raffle: Option<NearToken>,
         min_deposit: Option<NearToken>,
@@ -77,7 +71,6 @@ impl Contract {
         Self {
             config: Config {
                 external_pool,
-                next_raffle_timestamp: first_raffle.0,
                 max_to_raffle: max_to_raffle.unwrap_or(MAX_TO_RAFFLE),
                 min_to_raffle: min_to_raffle.unwrap_or(MIN_TO_RAFFLE),
                 min_deposit: min_deposit.unwrap_or(MIN_DEPOSIT),
