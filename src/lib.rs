@@ -28,9 +28,9 @@ const MIN_TO_RAFFLE: NearToken = NearToken::from_yoctonear(1);
 // Maximum amount to Raffle (50 NEAR)
 const MAX_TO_RAFFLE: NearToken = NearToken::from_near(50);
 
+pub mod external;
 pub mod pool;
 pub mod users;
-pub mod external;
 
 #[near(serializers=[borsh, json])]
 #[derive(Clone)]
@@ -42,7 +42,7 @@ pub struct Config {
     max_deposit: NearToken,
     epochs_wait: u64,
     time_between_raffles: u64,
-   pub emergency: bool,
+    pub emergency: bool,
 }
 
 // Define the contract structure

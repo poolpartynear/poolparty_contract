@@ -25,13 +25,6 @@ impl Contract {
         self.pool.next_withdraw_turn
     }
 
-    pub fn get_next_withdraw_turn(&self) -> u64 {
-        // The withdraw_turn increases by 1 each time we unstake from external.
-        // When a user unstakes, we asign them a withdraw turn. The user can
-        // withdraw when current_turn is equal to their asigned turn
-        self.pool.next_withdraw_turn
-    }
-
     pub fn get_next_withdraw_epoch(&self) -> u64 {
         self.pool.next_withdraw_epoch
     }
@@ -52,11 +45,11 @@ impl Contract {
             self.pool.to_unstake > NearToken::from_yoctonear(0),
             "Nothing to unstake!"
         );
+
         // Check if we are already interacting
         self.start_interacting();
 
-        // TODO: If someone wants to unstake, they will get the next turn
-        //  self.users.(user, External.get_next_withdraw_turn());
+        self.pool.next_withdraw_turn += 1;
 
         Promise::new(self.config.external_pool.clone())
             .function_call(
@@ -91,7 +84,6 @@ impl Contract {
         } else {
             self.pool.pool_tickets.saturating_sub(amount);
             self.pool.next_withdraw_epoch = env::epoch_height() + self.config.epochs_wait;
-            self.pool.next_withdraw_turn += 1;
             // TODO: Ask for bellow
             // next time we want to withdraw
             // storage.set<string>('external_action', 'withdraw')

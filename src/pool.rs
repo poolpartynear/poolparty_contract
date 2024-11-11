@@ -188,7 +188,7 @@ impl Contract {
         self.pool.to_unstake = self.pool.to_unstake.saturating_add(amount);
 
         // the user will be able to withdraw in the next withdraw_turn
-        self.set_withdraw_turn_for(&user, self.get_next_withdraw_turn());
+        self.set_withdraw_turn_for(&user, self.get_withdraw_turn());
 
         // update user info
         self.unstake_tickets_for(&user, amount);
@@ -218,7 +218,10 @@ impl Contract {
         ); // Todo: Check the Gas amount
         require!(self.is_registered(&user), "User is not registered");
 
-        require!(self.get_withdraw_turn() >= self.get_withdraw_turn_for(&user).unwrap(), "Withdraw not ready");
+        require!(
+            self.get_withdraw_turn() >= self.get_withdraw_turn_for(&user).unwrap(),
+            "Withdraw not ready"
+        );
 
         let amount = self.withdraw_all_for(&user);
         require!(amount != 0, "Nothing to withdraw");
@@ -263,7 +266,6 @@ impl Contract {
         //     `EVENT_JSON:{"standard": "nep297", "version": "1.0.0", "event": "prize-user", "data": {"pool": "${context.contractName}", "user": "${winner}", "amount": "${user_prize}"}}`
         //   );
 
-
         // Set next raffle time
         self.pool.next_raffle = now + self.config.time_between_raffles;
         self.pool.prize_pool = NearToken::from_near(0);
@@ -284,12 +286,13 @@ impl Contract {
         let now: u64 = env::block_timestamp_ms();
         let last_update: u64 = self.pool.last_prize_update;
 
-        log!("Last update: {}\n now: {}", last_update + PRIZE_UPDATE_INTERVAL, now);
-
-        require!(
-            now.ge(&(last_update + 100)),
-            "Not enough time has passed"
+        log!(
+            "Last update: {}\n now: {}",
+            last_update + PRIZE_UPDATE_INTERVAL,
+            now
         );
+
+        require!(now.ge(&(last_update + 100)), "Not enough time has passed");
 
         Promise::new(self.config.external_pool.clone())
             .function_call(

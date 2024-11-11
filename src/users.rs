@@ -91,7 +91,7 @@ impl Contract {
                 withdraw_turn: None,
             },
         );
-        
+
         self.users.user_to_uid.insert(user.clone(), uid);
 
         self.users.tree.push(UserNode {
@@ -194,11 +194,15 @@ impl Contract {
         // accum_weights[0] has the total of tickets in the pool
         // user_staked[0] is the tickets of the pool
 
-        log!("acum weights pool {}, user staked {}", self.users.tree[0].weight, self.users.tree[0].staked);
+        log!(
+            "acum weights pool {}, user staked {}",
+            self.users.tree[0].weight,
+            self.users.tree[0].staked
+        );
 
         if self.users.tree[0].weight > self.users.tree[0].staked {
             winning_ticket = self.random_u128(self.users.tree[0].staked, self.users.tree[0].weight);
-        log!("winning ticket {}", winning_ticket);
+            log!("winning ticket {}", winning_ticket);
         }
 
         let uid = self.find_user_with_ticket(winning_ticket);
@@ -214,8 +218,8 @@ impl Contract {
         let mut winning_ticket = ticket;
 
         loop {
-            let left: u32 = uid * 2 + 1;
-            let right: u32 = uid * 2 + 2;
+            let left: u32 = uid * 2;
+            let right: u32 = uid * 2 + 1;
 
             if winning_ticket < self.users.tree[uid].staked {
                 return uid;
@@ -225,7 +229,8 @@ impl Contract {
                 winning_ticket -= self.users.tree[uid].staked;
                 uid = left
             } else {
-                winning_ticket = winning_ticket - self.users.tree[uid].staked - self.users.tree[uid].staked;
+                winning_ticket =
+                    winning_ticket - self.users.tree[uid].staked - self.users.tree[left].staked;
                 uid = right
             }
         }
