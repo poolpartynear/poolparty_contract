@@ -46,19 +46,9 @@ impl Contract {
         self.pool.winners.len() as u32
     }
 
-    pub fn get_winners(&self, from: u32, limit: u32) -> Vec<&Winner> {
-        require!(
-            from.lt(&self.get_number_of_winners()),
-            format!("'from' must be < {}", self.get_number_of_winners())
-        );
-
-        require!(
-            limit.gt(&0) && limit.le(&self.get_number_of_winners()),
-            format!(
-                "'limit' must be between 1 and {}",
-                self.get_number_of_winners()
-            )
-        );
+    pub fn get_winners(&self, from: Option<u32>, limit: Option<u32>) -> Vec<&Winner> {
+        let from = from.unwrap_or(0);
+        let limit = limit.unwrap_or(10);
 
         self.pool
             .winners
