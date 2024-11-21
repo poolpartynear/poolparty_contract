@@ -4,13 +4,9 @@ use near_sdk::{require, serde_json::json, Gas, Promise, PromiseError};
 #[near]
 impl Contract {
     // Semaphore to interact with external pool
-    pub fn is_interacting(&self) -> bool {
-        self.pool.is_interacting
-    }
-
     pub fn start_interacting(&mut self) {
         require!(
-            !self.is_interacting(),
+            !self.pool.is_interacting,
             "Already interacting with the staking contract"
         );
 
@@ -21,24 +17,19 @@ impl Contract {
         self.pool.is_interacting = false;
     }
 
-    pub fn get_withdraw_turn(&self) -> u64 {
-        self.pool.next_withdraw_turn
-    }
+    // Interact with external pool ------------------------------------------------
+    pub fn interact_external(&mut self) -> Promise {
+        require!(!self.config.emergency, "We'll be back soon");
 
-    pub fn get_next_withdraw_epoch(&self) -> u64 {
-        self.pool.next_withdraw_epoch
-    }
-
-    pub fn can_withdraw_external(&self) -> bool {
-        if env::epoch_height() >= self.pool.next_withdraw_epoch {
-            return true;
-        } else {
-            return false;
+        match self.next_action {
+            Action::Unstake => self.unstake_external(),
+            Action::Withdraw => self.withdraw_external(),
         }
     }
 
+
     // Unstake external -----------------------------------------------------------
-    pub fn unstake_external(&mut self) -> Promise {
+    fn unstake_external(&mut self) -> Promise {
         require!(env::prepaid_gas() >= Gas::from_tgas(300), "Not enough gas"); // Todo: evaluate gas
 
         require!(
@@ -82,11 +73,11 @@ impl Contract {
             // Rollback next_withdraw_turn
             self.pool.next_withdraw_turn -= 1;
         } else {
-            self.pool.pool_tickets.saturating_sub(amount);
+            self.pool.tickets.saturating_sub(amount);
             self.pool.next_withdraw_epoch = env::epoch_height() + self.config.epochs_wait;
-            // TODO: Ask for bellow
+
             // next time we want to withdraw
-            // storage.set<string>('external_action', 'withdraw')
+            self.next_action = Action::Withdraw;
 
             self.pool.to_unstake = self.pool.to_unstake.saturating_sub(amount);
         }
@@ -94,7 +85,7 @@ impl Contract {
     }
 
     // Withdraw external ----------------------------------------------------------
-    pub fn withdraw_external(&mut self) -> Promise {
+    fn withdraw_external(&mut self) -> Promise {
         require!(env::prepaid_gas() >= Gas::from_tgas(300), "Not enough gas"); // TODO: evaluate
 
         // Check that 4 epochs passed from the last unstake from external
@@ -136,7 +127,7 @@ impl Contract {
             false
         } else {
             // TODO ASK
-            // storage.set<string>('external_action', 'unstake')
+            self.next_action = Action::Unstake;
             self.pool.next_withdraw_turn += 1;
             true
         }

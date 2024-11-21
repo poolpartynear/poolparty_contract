@@ -1,10 +1,9 @@
-use near_sdk::{json_types::U128, NearToken};
+use near_sdk::json_types::U128;
+use near_workspaces::types::NearToken;
 use near_workspaces::{Account, Contract, DevNetwork, Worker};
 use serde_json::json;
 
-pub async fn init(
-    worker: &Worker<impl DevNetwork>,
-) -> Result<(Contract, Contract, Account, Account), Box<dyn std::error::Error>> {
+pub async fn init(worker: &Worker<impl DevNetwork>) -> Result<(Contract, Contract, Account, Account), Box<dyn std::error::Error>> {
     let contract_wasm = near_workspaces::compile_project("./").await?;
     let contract = worker.dev_deploy(&contract_wasm).await?;
 
