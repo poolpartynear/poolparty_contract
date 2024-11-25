@@ -1,102 +1,140 @@
-use near_sdk::json_types::U128;
+use chrono::Utc;
+use near_sdk::AccountId;
+use near_workspaces::network::Sandbox;
 use near_workspaces::types::NearToken;
-use near_workspaces::{Account, Contract, DevNetwork, Worker};
+use near_workspaces::{Account, Contract, Worker};
+use poolparty::pool::Pool;
+use poolparty::UserInfo;
 use serde_json::json;
 
-pub async fn init(worker: &Worker<impl DevNetwork>) -> Result<(Contract, Contract, Account, Account), Box<dyn std::error::Error>> {
-    let contract_wasm = near_workspaces::compile_project("./").await?;
-    let contract = worker.dev_deploy(&contract_wasm).await?;
+pub async fn init(
+) -> Result<(Account, Account, Account, Contract, Worker<Sandbox>), Box<dyn std::error::Error>> {
+    let sandbox = near_workspaces::sandbox().await?;
 
-    let staking_contract = worker
-        .dev_deploy(&std::fs::read("res/staking.wasm")?)
+    let root = sandbox.root_account().unwrap();
+
+    // who controls the reserve
+    let guardian = root
+        .create_subaccount("guardian")
+        .initial_balance(NearToken::from_near(20))
+        .transact()
+        .await?
+        .unwrap();
+
+    // the pool party contract
+    let contract_wasm = near_workspaces::compile_project("./").await?;
+    let contract = sandbox.dev_deploy(&contract_wasm).await?;
+
+    // the mock validator
+    let staking_contract = sandbox
+        .dev_deploy(&std::fs::read(
+            "./tests/mock-validator/mock-validator.wasm",
+        )?)
         .await?;
 
-    let alice = worker.dev_create_account().await?;
-    let bob = worker.dev_create_account().await?;
+    let now = Utc::now().timestamp();
+    let one_minute = 60 * 1000000000;
+    let a_minute_from_now = now * 1000000000 + one_minute;
 
-    // println!("{:?}", user_account.view_account().await?);
-    // let outcome = user_account
-    //     .call(staking_contract.id(), "deposit_and_stake")
-    //     .args_json(json!({}))
-    //     .deposit(NearToken::from_near(20))
-    //     .transact()
-    //     .await?;
-    //
-    let init_outcome = contract
+    let init = contract
         .call("new")
         .args_json(json!(
-            { "external_pool": staking_contract.id(),
-                "first_raffle": "1827381273",
-                "min_to_raffle": NearToken::from_near(40),
-                "max_to_raffle": NearToken::from_near(60),
-                "min_deposit":  NearToken::from_near(1),
-                "max_deposit":  NearToken::from_near(20),
-                "epochs_wait":  "4",
-                "time_between_raffles": "86400000000000"
+            {
+                "guardian": guardian.id(),
+                "external_pool": staking_contract.id(),
+                "first_raffle": a_minute_from_now.to_string(),
+                "time_between_raffles": one_minute.to_string(),
             }
         ))
         .transact()
         .await?;
 
-    assert!(init_outcome.is_success());
+    assert!(init.is_success());
 
-    // println!("{:?}", user_account.view_account().await?);
+    let ana = root
+        .create_subaccount("ana")
+        .initial_balance(NearToken::from_near(60))
+        .transact()
+        .await?
+        .unwrap();
+    let bob = root
+        .create_subaccount("bob")
+        .initial_balance(NearToken::from_near(20))
+        .transact()
+        .await?
+        .unwrap();
 
-    // let staked: serde_json::Value = staking_contract
-    //     .view("get_account")
-    //     .args_json(json!({ "account_id": user_account.id() }))
-    //     .await?
-    //     .json()?;
-
-    // println!("{:#}", staked);
-    // let user_message_outcome = contract.view("get_greeting").args_json(json!({})).await?;
-    // assert_eq!(user_message_outcome.json::<String>()?, "Hello World!");
-
-    Ok((contract, staking_contract, alice, bob))
+    Ok((ana, bob, guardian, contract, sandbox))
 }
 
 // Pool -----------------------------------------------------------
 #[tokio::test]
-async fn adds_tickets_to_user() -> Result<(), Box<dyn std::error::Error>> {
-    let worker = near_workspaces::sandbox().await?;
-    let (contract, _staking_contract, alice, _bob) = init(&worker).await?;
+async fn test_deposit() -> Result<(), Box<dyn std::error::Error>> {
+    let (ana, bob, guardian, contract, _sandbox) = init().await?;
 
-    let deposit_outcome = alice
+    let guardian_deposit = guardian
         .call(contract.id(), "deposit_and_stake")
-        .args_json(json!({}))
-        .deposit(NearToken::from_near(2))
+        .deposit(NearToken::from_near(1))
         .max_gas()
         .transact()
         .await?;
-    assert!(deposit_outcome.is_success());
 
-    let get_staked: U128 = alice
-        .view(contract.id(), "get_staked_for")
-        .args_json(json!({"user": alice.id()}))
+    let ana_deposit = ana
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(50))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let bob_deposit = bob
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(1))
+        .max_gas()
+        .transact()
+        .await?;
+
+    assert!(guardian_deposit.is_success());
+    assert!(ana_deposit.is_success());
+    assert!(bob_deposit.is_success());
+
+    let ana_balance = contract
+        .view("get_user_info")
+        .args_json(json!({"user": ana.id()}))
         .await?
-        .json()?;
+        .json::<UserInfo>()?;
     assert_eq!(
-        NearToken::from_yoctonear(get_staked.0),
-        NearToken::from_near(2)
+        ana_balance.staked.as_yoctonear(),
+        NearToken::from_near(50).as_yoctonear()
     );
 
-    let second_deposit_outcome = alice
-        .call(contract.id(), "deposit_and_stake")
-        .args_json(json!({}))
-        .deposit(NearToken::from_near(2))
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(second_deposit_outcome.is_success());
-
-    let second_get_staked: U128 = alice
-        .view(contract.id(), "get_staked_for")
-        .args_json(json!({"user": alice.id()}))
+    let bob_balance = contract
+        .view("get_user_info")
+        .args_json(json!({"user": bob.id()}))
         .await?
-        .json()?;
+        .json::<UserInfo>()?;
     assert_eq!(
-        NearToken::from_yoctonear(second_get_staked.0),
-        NearToken::from_near(4)
+        bob_balance.staked.as_yoctonear(),
+        NearToken::from_near(1).as_yoctonear()
+    );
+
+    let guardian_balance = contract
+        .view("get_user_info")
+        .args_json(json!({"user": guardian.id()}))
+        .await?
+        .json::<UserInfo>()?;
+    assert_eq!(
+        guardian_balance.staked.as_yoctonear(),
+        NearToken::from_near(1).as_yoctonear()
+    );
+
+    let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
+    assert_eq!(
+        pool_info.tickets.as_yoctonear(),
+        ana_balance
+            .staked
+            .saturating_add(bob_balance.staked)
+            .saturating_add(guardian_balance.staked)
+            .as_yoctonear()
     );
 
     Ok(())
@@ -104,19 +142,18 @@ async fn adds_tickets_to_user() -> Result<(), Box<dyn std::error::Error>> {
 
 // Emergency -----------------------------------------------------------
 #[tokio::test]
-async fn emergency() -> Result<(), Box<dyn std::error::Error>> {
-    let worker = near_workspaces::sandbox().await?;
-    let (contract, _staking_contract, alice, _bob) = init(&worker).await?;
+async fn test_emergency() -> Result<(), Box<dyn std::error::Error>> {
+    let (ana, _bob, _guardian, contract, _sandbox) = init().await?;
 
     // User can't start or stop emergency
-    let user_emergency_start = alice
+    let user_emergency_start = ana
         .call(contract.id(), "emergency_start")
         .args_json(json!({}))
         .transact()
         .await?;
     assert!(user_emergency_start.is_failure());
 
-    let user_emergency_stop = alice
+    let user_emergency_stop = ana
         .call(contract.id(), "emergency_stop")
         .args_json(json!({}))
         .transact()
@@ -132,7 +169,7 @@ async fn emergency() -> Result<(), Box<dyn std::error::Error>> {
     assert!(contract_emergency_start.is_success());
 
     // User can't deposit or unstake during emergency
-    let deposit_during_emergency = alice
+    let deposit_during_emergency = ana
         .call(contract.id(), "deposit_and_stake")
         .args_json(json!({}))
         .deposit(NearToken::from_near(2))
@@ -141,7 +178,7 @@ async fn emergency() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     assert!(deposit_during_emergency.is_failure());
 
-    let unstake_during_emergency = alice
+    let unstake_during_emergency = ana
         .call(contract.id(), "unstake")
         .args_json(json!({}))
         .max_gas()
@@ -150,7 +187,7 @@ async fn emergency() -> Result<(), Box<dyn std::error::Error>> {
     assert!(unstake_during_emergency.is_failure());
 
     // User can't raffle during emergency
-    let raffle_during_emergency = alice
+    let raffle_during_emergency = ana
         .call(contract.id(), "raffle")
         .args_json(json!({}))
         .max_gas()
@@ -159,7 +196,7 @@ async fn emergency() -> Result<(), Box<dyn std::error::Error>> {
     assert!(raffle_during_emergency.is_failure());
 
     // User can't withdraw during emergency
-    let withdraw_during_emergency = alice
+    let withdraw_during_emergency = ana
         .call(contract.id(), "withdraw_all")
         .args_json(json!({}))
         .max_gas()
@@ -174,6 +211,52 @@ async fn emergency() -> Result<(), Box<dyn std::error::Error>> {
         .transact()
         .await?;
     assert!(contract_emergency_stop.is_success());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
+    let (ana, bob, guardian, contract, sandbox) = init().await?;
+    
+    let _guardian_deposit = guardian
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(1))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let _ana_deposit = ana
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(50))
+        .max_gas()
+        .transact()
+        .await?;
+    
+    let _bob_deposit = bob
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(1))
+        .max_gas()
+        .transact()
+        .await?;
+
+    // Fast forward 200 blocks
+    let blocks_to_advance = 200;
+
+    sandbox.fast_forward(blocks_to_advance).await?;
+
+    let prize_update_outcome = ana
+        .call(contract.id(), "update_prize")
+        .max_gas()
+        .transact()
+        .await?;
+
+    assert!(prize_update_outcome.is_success());
+
+    let raffle = contract.call("raffle").max_gas().transact().await?;
+    let winner = raffle.json::<AccountId>()?;
+
+    assert_eq!(&winner, ana.id());
 
     Ok(())
 }
