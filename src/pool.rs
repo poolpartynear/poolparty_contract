@@ -1,5 +1,5 @@
 use crate::*;
-use near_sdk::{near, require, serde_json::json, Gas, Promise, PromiseError};
+use near_sdk::{json_types::U128, near, require, serde_json::json, Gas, Promise, PromiseError};
 
 // Amount of time between prize updates (10 sec)
 // To avoid blocking the interaction with external pool
@@ -81,7 +81,6 @@ impl Contract {
         );
 
         // Deposit the tokens in the external pool
-
         // Add the tickets to the pool, but not yet to the user (rollback if failed)
         self.pool.tickets = self.pool.tickets.saturating_add(tickets);
 
@@ -211,7 +210,7 @@ impl Contract {
             "event": "transfer",
             "data": {
                 "user": user,
-                "amount": amount,
+                "amount": U128(amount),
             },
         });
 
@@ -221,6 +220,7 @@ impl Contract {
     // Raffle ---------------------------------------------------------------------
     pub fn raffle(&mut self) -> AccountId {
         require!(!self.config.emergency, "We will be back soon");
+        require!(!self.users.tree.len() > 3 , "No users in the pool");
 
         let now: u64 = env::block_timestamp_ms();
         let prize: NearToken = self.pool.prize;
@@ -238,7 +238,7 @@ impl Contract {
         self.stake_tickets_for(&winner, prize.as_yoctonear());
 
         // add the prize to the pool, and reset the prize_pool
-        self.pool.tickets.saturating_add(prize);
+        self.pool.tickets = self.pool.tickets.saturating_add(prize);
         self.pool.prize = NearToken::from_yoctonear(0);
 
         // Set next raffle time

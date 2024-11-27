@@ -101,8 +101,11 @@ impl Contract {
     }
 
     fn remove_tickets_from(&mut self, user: &AccountId, amount: u128) {
-        let mut uid = self.users.map[user].node;
+        self.pool
+            .tickets
+            .saturating_sub(NearToken::from_yoctonear(amount));
 
+        let mut uid = self.users.map[user].node;
         self.users.tree[uid].staked -= amount;
         self.users.tree[uid].weight -= amount;
 

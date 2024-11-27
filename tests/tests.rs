@@ -1,7 +1,7 @@
-use chrono::Utc;
-use near_sdk::AccountId;
+use chrono::{round, Utc};
+use near_primitives::types::AccountId;
+use near_sdk::NearToken;
 use near_workspaces::network::Sandbox;
-use near_workspaces::types::NearToken;
 use near_workspaces::{Account, Contract, Worker};
 use poolparty::pool::Pool;
 use poolparty::UserInfo;
@@ -27,9 +27,7 @@ pub async fn init(
 
     // the mock validator
     let staking_contract = sandbox
-        .dev_deploy(&std::fs::read(
-            "./tests/mock-validator/mock-validator.wasm",
-        )?)
+        .dev_deploy(&std::fs::read("./tests/mock-validator/validator.wasm")?)
         .await?;
 
     let now = Utc::now().timestamp();
@@ -51,12 +49,22 @@ pub async fn init(
 
     assert!(init.is_success());
 
+    let guardian_deposit = guardian
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(1))
+        .max_gas()
+        .transact()
+        .await?;
+
+    assert!(guardian_deposit.is_success());
+
     let ana = root
         .create_subaccount("ana")
         .initial_balance(NearToken::from_near(60))
         .transact()
         .await?
         .unwrap();
+
     let bob = root
         .create_subaccount("bob")
         .initial_balance(NearToken::from_near(20))
@@ -72,13 +80,6 @@ pub async fn init(
 async fn test_deposit() -> Result<(), Box<dyn std::error::Error>> {
     let (ana, bob, guardian, contract, _sandbox) = init().await?;
 
-    let guardian_deposit = guardian
-        .call(contract.id(), "deposit_and_stake")
-        .deposit(NearToken::from_near(1))
-        .max_gas()
-        .transact()
-        .await?;
-
     let ana_deposit = ana
         .call(contract.id(), "deposit_and_stake")
         .deposit(NearToken::from_near(50))
@@ -93,7 +94,6 @@ async fn test_deposit() -> Result<(), Box<dyn std::error::Error>> {
         .transact()
         .await?;
 
-    assert!(guardian_deposit.is_success());
     assert!(ana_deposit.is_success());
     assert!(bob_deposit.is_success());
 
@@ -122,12 +122,14 @@ async fn test_deposit() -> Result<(), Box<dyn std::error::Error>> {
         .args_json(json!({"user": guardian.id()}))
         .await?
         .json::<UserInfo>()?;
+
     assert_eq!(
         guardian_balance.staked.as_yoctonear(),
         NearToken::from_near(1).as_yoctonear()
     );
 
     let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
+
     assert_eq!(
         pool_info.tickets.as_yoctonear(),
         ana_balance
@@ -217,14 +219,7 @@ async fn test_emergency() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
-    let (ana, bob, guardian, contract, sandbox) = init().await?;
-    
-    let _guardian_deposit = guardian
-        .call(contract.id(), "deposit_and_stake")
-        .deposit(NearToken::from_near(1))
-        .max_gas()
-        .transact()
-        .await?;
+    let (ana, bob, _guardian, contract, sandbox) = init().await?;
 
     let _ana_deposit = ana
         .call(contract.id(), "deposit_and_stake")
@@ -232,7 +227,7 @@ async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
         .max_gas()
         .transact()
         .await?;
-    
+
     let _bob_deposit = bob
         .call(contract.id(), "deposit_and_stake")
         .deposit(NearToken::from_near(1))
@@ -259,4 +254,102 @@ async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(&winner, ana.id());
 
     Ok(())
+}
+
+#[tokio::test]
+async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
+    let (ana, bob, _guardian, contract, _sandbox) = init().await?;
+
+    let _ana_deposit = ana
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(50))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let _bob_deposit = bob
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(1))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let ana_unstake = ana
+        .call(contract.id(), "unstake")
+        .args_json(json!({"amount": NearToken::from_near(10)}))
+        .max_gas()
+        .transact()
+        .await?;
+
+    assert!(ana_unstake.is_success());
+
+    let ana_balance = contract
+        .view("get_user_info")
+        .args_json(json!({"user": ana.id()}))
+        .await?
+        .json::<UserInfo>()?;
+
+    assert_eq!(
+        ana_balance.staked.as_yoctonear(),
+        NearToken::from_near(40).as_yoctonear()
+    );
+    assert_eq!(ana_balance.available, NearToken::from_near(10));
+    assert_eq!(ana_balance.withdraw_turn.0, 0);
+
+    let pool_balance = contract.view("get_pool_info").await?.json::<Pool>()?;
+    assert_eq!(
+        pool_balance.to_unstake.as_yoctonear(),
+        NearToken::from_near(10).as_yoctonear()
+    );
+
+    let interact_external = contract
+        .call("interact_external")
+        .max_gas()
+        .transact()
+        .await?;
+
+    assert!(interact_external.is_success());
+
+    let pool_balance = contract.view("get_pool_info").await?.json::<Pool>()?;
+    assert_eq!(pool_balance.to_unstake.as_yoctonear(), 0);
+    assert_eq!(pool_balance.next_withdraw_turn, 1);
+    assert_eq!(
+        pool_balance.tickets.as_yoctonear(),
+        NearToken::from_near(42).as_yoctonear()
+    );
+
+    let ana_prev = ana
+        .view_account()
+        .await?;
+    
+    let ana_withdraw = ana
+        .call(contract.id(), "withdraw_all")
+        .max_gas()
+        .transact()
+        .await?;
+
+    assert!(ana_withdraw.is_success());
+
+    let ana_current = ana
+        .view_account()
+        .await?;
+    
+    // Round up Annas balances
+    let roundup_prev = roundup_balance(ana_prev.balance);
+    let roundup_curr = roundup_balance(ana_current.balance);
+
+    assert_eq!(roundup_prev + NearToken::from_near(10).as_yoctonear(), roundup_curr);
+
+
+    let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
+    assert_eq!(pool_info.next_withdraw_turn, 2);
+    
+    Ok(())
+
+}
+
+// Helpers --------------------------------------------------------
+fn roundup_balance(amount: NearToken) -> u128 {
+    let rem = amount.as_yoctonear() % 10u128.pow(24);
+    amount.as_yoctonear() - rem + 10u128.pow(24)
 }

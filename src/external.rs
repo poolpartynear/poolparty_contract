@@ -4,7 +4,7 @@ use near_sdk::{require, serde_json::json, Gas, Promise, PromiseError};
 #[near]
 impl Contract {
     // Semaphore to interact with external pool
-    pub fn start_interacting(&mut self) {
+    pub(crate) fn start_interacting(&mut self) {
         require!(
             !self.pool.is_interacting,
             "Already interacting with the staking contract"
@@ -13,7 +13,7 @@ impl Contract {
         self.pool.is_interacting = true;
     }
 
-    pub fn stop_interacting(&mut self) {
+    pub(crate) fn stop_interacting(&mut self) {
         self.pool.is_interacting = false;
     }
 
@@ -26,7 +26,6 @@ impl Contract {
             Action::Withdraw => self.withdraw_external(),
         }
     }
-
 
     // Unstake external -----------------------------------------------------------
     fn unstake_external(&mut self) -> Promise {
@@ -45,7 +44,7 @@ impl Contract {
         Promise::new(self.config.external_pool.clone())
             .function_call(
                 "unstake".to_string(),
-                json!({ "amount": self.pool.to_unstake.as_yoctonear()})
+                json!({ "amount": self.pool.to_unstake})
                     .to_string()
                     .into_bytes(),
                 NO_DEPOSIT,
@@ -67,13 +66,14 @@ impl Contract {
     pub fn unstake_external_callback(
         &mut self,
         amount: NearToken,
-        #[callback_result] call_result: Result<NearToken, PromiseError>,
+        #[callback_result] call_result: Result<(), PromiseError>,
     ) {
         if call_result.is_err() {
+            log!("Error while unstaking from external pool");
             // Rollback next_withdraw_turn
             self.pool.next_withdraw_turn -= 1;
         } else {
-            self.pool.tickets.saturating_sub(amount);
+            self.pool.tickets = self.pool.tickets.saturating_sub(amount);
             self.pool.next_withdraw_epoch = env::epoch_height() + self.config.epochs_wait;
 
             // next time we want to withdraw
