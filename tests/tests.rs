@@ -1,4 +1,4 @@
-use chrono::{round, Utc};
+use chrono::Utc;
 use near_primitives::types::AccountId;
 use near_sdk::NearToken;
 use near_workspaces::network::Sandbox;
@@ -27,7 +27,7 @@ pub async fn init(
 
     // the mock validator
     let staking_contract = sandbox
-        .dev_deploy(&std::fs::read("./tests/mock-validator/validator.wasm")?)
+        .dev_deploy(&std::fs::read("./tests/mock-validator/staking.wasm")?)
         .await?;
 
     let now = Utc::now().timestamp();
@@ -343,7 +343,7 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
 
     let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
     assert_eq!(pool_info.next_withdraw_turn, 2);
-    
+
     Ok(())
 
 }
