@@ -320,8 +320,6 @@ impl Contract {
         }
         log!("now the prize is {}", self.pool.prize);
 
-        // Todo: emit event
-
         // Update prize_pool
         log!("New prize: {}", prize.exact_amount_display());
         self.pool.prize = prize.min(self.config.max_to_raffle);
