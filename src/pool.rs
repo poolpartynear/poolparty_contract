@@ -164,7 +164,7 @@ impl Contract {
 
         // the user will be able to withdraw in the next withdraw_turn
         self.set_withdraw_turn_for(&user, self.pool.next_withdraw_turn);
-        
+
         self.set_withdraw_epoch_for(&user, env::epoch_height() + self.config.epochs_wait);
 
         // update user info
@@ -222,7 +222,7 @@ impl Contract {
     // Raffle ---------------------------------------------------------------------
     pub fn raffle(&mut self) -> AccountId {
         require!(!self.config.emergency, "We will be back soon");
-        require!(!self.users.tree.len() > 3 , "No users in the pool");
+        require!(!self.users.tree.len() > 3, "No users in the pool");
 
         let now: u64 = env::block_timestamp_ms();
         let prize: NearToken = self.pool.prize;
@@ -235,15 +235,18 @@ impl Contract {
 
         // Pick a random ticket as winner
         let winner: AccountId = self.choose_random_winner();
-        log!("Prize is {}", prize);
-        log!("before staking prize {}", self.get_staked_for(&winner));
-        // Give the prize to the winner
-        self.stake_tickets_for(&winner, prize.as_yoctonear());
-         log!("after staking prize {}", self.get_staked_for(&winner));
-        log!("pool tickets {}", self.pool.tickets);
+        
+        // Part goes to the reserve via pool_fee
+        let guardian = self.config.guardian.clone();
+        let pool_fee = (prize.as_yoctonear() * self.config.pool_fee as u128) / 100u128;
+        self.stake_tickets_for(&guardian, pool_fee);
+
+        // Give the prize to the winner (minus the pool_fee)
+        self.stake_tickets_for(&winner, prize.as_yoctonear() - pool_fee);
+
         // add the prize to the pool, and reset the prize_pool
         self.pool.tickets = self.pool.tickets.saturating_add(prize);
-         log!("pool tickets after{}", self.pool.tickets);
+
         self.pool.prize = NearToken::from_yoctonear(0);
 
         // Set next raffle time
@@ -318,12 +321,9 @@ impl Contract {
         if staked_in_external.gt(&self.pool.tickets) {
             prize = staked_in_external.saturating_sub(self.pool.tickets);
         }
-        log!("now the prize is {}", self.pool.prize);
 
         // Update prize_pool
-        log!("New prize: {}", prize.exact_amount_display());
         self.pool.prize = prize.min(self.config.max_to_raffle);
-        log!("and here it is prize is {}", self.pool.prize);
 
         // Update last_prize_update
         self.pool.last_prize_update = env::block_timestamp_ms();

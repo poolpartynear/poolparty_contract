@@ -55,6 +55,7 @@ pub struct Config {
     max_to_raffle: NearToken,
     min_deposit: NearToken,
     max_deposit: NearToken,
+    pool_fee: u8,
     epochs_wait: u64,
     time_between_raffles: u64,
     guardian: AccountId,
@@ -94,6 +95,7 @@ impl Contract {
                 min_to_raffle: min_to_raffle.unwrap_or(MIN_TO_RAFFLE),
                 min_deposit: min_deposit.unwrap_or(MIN_DEPOSIT),
                 max_deposit: max_deposit.unwrap_or(MAX_DEPOSIT),
+                pool_fee: 0,
                 epochs_wait: epochs_wait.unwrap_or(EPOCHS_WAIT).0,
                 time_between_raffles: time_between_raffles.unwrap_or(RAFFLE_WAIT).0,
                 emergency: false,
@@ -133,4 +135,24 @@ impl Contract {
     pub fn emergency_start(&mut self) {
         self.config.emergency = true;
     }
+
+    #[private]
+    pub fn set_pool_fee(&mut self, fee: u8) {
+        self.config.pool_fee = fee;
+    }
+
+    #[private]
+    pub fn set_time_between_raffles(&mut self, time: U64) {
+        self.config.time_between_raffles = time.0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::{testing_env, MockedBlockchain};
+
+    #[test]
+    fn test_new_contract() {}
 }

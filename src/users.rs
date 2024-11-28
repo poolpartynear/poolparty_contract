@@ -167,7 +167,6 @@ impl Contract {
 
         if self.users.tree[0].weight > self.users.tree[0].staked {
             winning_ticket = self.random_u128(self.users.tree[0].staked, self.users.tree[0].weight);
-            log!("winning ticket {}", winning_ticket);
         }
 
         let uid = self.find_user_with_ticket(winning_ticket);
