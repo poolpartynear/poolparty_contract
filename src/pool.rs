@@ -18,8 +18,9 @@ pub struct Pool {
     pub to_unstake: NearToken,
     pub prize: NearToken,
     pub last_prize_update: u64,
+    pub pool_fee: u8,
     pub next_raffle: u64,
-    pub withdraw_ready: bool,
+    pub withdraw_ready: bool, //ASK?
     pub tickets: NearToken,
     pub is_interacting: bool,
     pub next_withdraw_turn: u64,
@@ -33,6 +34,7 @@ impl Default for Pool {
             to_unstake: NearToken::from_yoctonear(0),
             prize: NearToken::from_yoctonear(0),
             last_prize_update: 0,
+            pool_fee: 0,
             next_raffle: 0,
             withdraw_ready: false,
             is_interacting: false,
@@ -235,10 +237,10 @@ impl Contract {
 
         // Pick a random ticket as winner
         let winner: AccountId = self.choose_random_winner();
-        
+
         // Part goes to the reserve via pool_fee
         let guardian = self.config.guardian.clone();
-        let pool_fee = (prize.as_yoctonear() * self.config.pool_fee as u128) / 100u128;
+        let pool_fee = (prize.as_yoctonear() * self.pool.pool_fee as u128) / 100u128;
         self.stake_tickets_for(&guardian, pool_fee);
 
         // Give the prize to the winner (minus the pool_fee)
@@ -329,5 +331,10 @@ impl Contract {
         self.pool.last_prize_update = env::block_timestamp_ms();
 
         prize
+    }
+
+    #[private]
+    pub fn set_pool_fee(&mut self, fee: u8) {
+        self.pool.pool_fee = fee;
     }
 }

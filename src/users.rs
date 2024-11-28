@@ -10,7 +10,7 @@ pub struct Winner(pub AccountId, pub NearToken, pub u64);
 pub struct User {
     pub node: u32,
     pub unstaked: u128,
-    pub available_when: u64,
+    pub available_when: u64, // ASK?
     pub withdraw_turn: Option<u64>,
 }
 
@@ -65,7 +65,6 @@ impl Contract {
         user.withdraw_turn
     }
 
-    // Setters
     pub(crate) fn add_new_user(&mut self, user: &AccountId) -> u32 {
         let uid = self.users.tree.len() as u32;
 
@@ -100,21 +99,6 @@ impl Contract {
         }
     }
 
-    fn remove_tickets_from(&mut self, user: &AccountId, amount: u128) {
-        self.pool
-            .tickets
-            .saturating_sub(NearToken::from_yoctonear(amount));
-
-        let mut uid = self.users.map[user].node;
-        self.users.tree[uid].staked -= amount;
-        self.users.tree[uid].weight -= amount;
-
-        while uid != 0 {
-            uid = (uid - 1) / 2;
-            self.users.tree[uid].weight -= amount;
-        }
-    }
-
     pub(crate) fn unstake_tickets_for(&mut self, user: &AccountId, amount: NearToken) {
         self.remove_tickets_from(user, amount.as_yoctonear());
 
@@ -143,7 +127,36 @@ impl Contract {
         user.available_when = epoch;
     }
 
-    // Returns a random number between min (included) and max (excluded)
+    fn remove_tickets_from(&mut self, user: &AccountId, amount: u128) {
+        self.pool
+            .tickets
+            .saturating_sub(NearToken::from_yoctonear(amount));
+
+        let mut uid = self.users.map[user].node;
+        self.users.tree[uid].staked -= amount;
+        self.users.tree[uid].weight -= amount;
+
+        while uid != 0 {
+            uid = (uid - 1) / 2;
+            self.users.tree[uid].weight -= amount;
+        }
+    }
+
+    pub(crate) fn choose_random_winner(&self) -> AccountId {
+        let mut winning_ticket: u128 = 0;
+
+        // accum_weights[0] has the total of tickets in the pool
+        // user_staked[0] is the tickets of the pool(guardian)
+
+        if self.users.tree[0].weight > self.users.tree[0].staked {
+            winning_ticket = self.random_u128(self.users.tree[0].staked, self.users.tree[0].weight);
+        }
+
+        let uid = self.find_user_with_ticket(winning_ticket);
+
+        self.users.tree[uid].account_id.clone()
+    }
+
     fn random_u128(&self, min: u128, max: u128) -> u128 {
         let random_seed = env::random_seed();
         let random = self.as_u128(random_seed.get(..16).unwrap());
@@ -159,22 +172,7 @@ impl Contract {
         result
     }
 
-    pub(crate) fn choose_random_winner(&self) -> AccountId {
-        let mut winning_ticket: u128 = 0;
-
-        // accum_weights[0] has the total of tickets in the pool
-        // user_staked[0] is the tickets of the pool
-
-        if self.users.tree[0].weight > self.users.tree[0].staked {
-            winning_ticket = self.random_u128(self.users.tree[0].staked, self.users.tree[0].weight);
-        }
-
-        let uid = self.find_user_with_ticket(winning_ticket);
-
-        self.users.tree[uid].account_id.clone()
-    }
-
-    pub fn find_user_with_ticket(&self, ticket: u128) -> u32 {
+    fn find_user_with_ticket(&self, ticket: u128) -> u32 {
         // Gets the user with the winning ticket by searching in the binary tree.
         // This function enumerates the users in pre-order. This does NOT affect
         // the probability of winning, which is nbr_tickets_owned / tickets_total.
@@ -199,4 +197,14 @@ impl Contract {
             }
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::{testing_env, MockedBlockchain};
+
+    #[test]
+    fn test_new_contract() {}
 }

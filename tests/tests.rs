@@ -249,7 +249,11 @@ async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     assert!(prize_update_outcome.is_success());
 
-    let prize = contract.view("get_pool_info").await?.json::<Pool>()?.prize;
+    let prize  = contract.view("get_pool_info").await?.json::<Pool>()?.prize;
+    let pool_fee = pool_info_before.pool_fee;
+    let reserve_prize = (prize.as_yoctonear() * pool_fee as u128) / 100u128;
+
+    let user_prize= NearToken::from_yoctonear(prize.as_yoctonear() - reserve_prize);
 
     let ana_before_win = contract
         .view("get_user_info")
@@ -271,7 +275,7 @@ async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
     
     let pool_info_after = contract.view("get_pool_info").await?.json::<Pool>()?;
 
-    assert_eq!(ana_after_win.staked, (ana_before_win.staked.saturating_add(prize)));
+    assert_eq!(ana_after_win.staked, (ana_before_win.staked.saturating_add(user_prize)));
     assert_eq!(pool_info_after.tickets, pool_info_before.tickets.saturating_add(prize));
     assert_eq!(pool_info_after.prize, NearToken::from_yoctonear(0));
 

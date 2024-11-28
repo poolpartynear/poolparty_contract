@@ -20,7 +20,7 @@ const MAX_DEPOSIT: NearToken = NearToken::from_near(1000);
 const MIN_DEPOSIT: NearToken = NearToken::from_near(1);
 
 // Amount of epochs to wait before unstaking
-const EPOCHS_WAIT: U64 = U64(4);
+const EPOCHS_WAIT: u64 = 4;
 
 // Minimum amount to Raffle (0.1 NEAR)
 const MIN_TO_RAFFLE: NearToken = NearToken::from_millinear(100);
@@ -55,7 +55,6 @@ pub struct Config {
     max_to_raffle: NearToken,
     min_deposit: NearToken,
     max_deposit: NearToken,
-    pool_fee: u8,
     epochs_wait: u64,
     time_between_raffles: u64,
     guardian: AccountId,
@@ -84,7 +83,7 @@ impl Contract {
         max_to_raffle: Option<NearToken>,
         min_deposit: Option<NearToken>,
         max_deposit: Option<NearToken>,
-        epochs_wait: Option<U64>,
+        epochs_wait: Option<u64>,
         time_between_raffles: Option<U64>,
     ) -> Self {
         Self {
@@ -95,8 +94,7 @@ impl Contract {
                 min_to_raffle: min_to_raffle.unwrap_or(MIN_TO_RAFFLE),
                 min_deposit: min_deposit.unwrap_or(MIN_DEPOSIT),
                 max_deposit: max_deposit.unwrap_or(MAX_DEPOSIT),
-                pool_fee: 0,
-                epochs_wait: epochs_wait.unwrap_or(EPOCHS_WAIT).0,
+                epochs_wait: epochs_wait.unwrap_or(EPOCHS_WAIT),
                 time_between_raffles: time_between_raffles.unwrap_or(RAFFLE_WAIT).0,
                 emergency: false,
             },
@@ -137,22 +135,12 @@ impl Contract {
     }
 
     #[private]
-    pub fn set_pool_fee(&mut self, fee: u8) {
-        self.config.pool_fee = fee;
-    }
-
-    #[private]
     pub fn set_time_between_raffles(&mut self, time: U64) {
         self.config.time_between_raffles = time.0;
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use near_sdk::test_utils::{accounts, VMContextBuilder};
-    use near_sdk::{testing_env, MockedBlockchain};
-
-    #[test]
-    fn test_new_contract() {}
+    #[private]
+    pub fn set_epochs_wait(&mut self, epochs: u64) {
+        self.config.epochs_wait = epochs;
+    }
 }
