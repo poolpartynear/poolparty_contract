@@ -1,5 +1,6 @@
 use chrono::Utc;
 use near_primitives::types::AccountId;
+use near_sdk::store::vec;
 use near_sdk::NearToken;
 use near_workspaces::network::Sandbox;
 use near_workspaces::{Account, Contract, Worker};
@@ -249,11 +250,11 @@ async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     assert!(prize_update_outcome.is_success());
 
-    let prize  = contract.view("get_pool_info").await?.json::<Pool>()?.prize;
+    let prize = contract.view("get_pool_info").await?.json::<Pool>()?.prize;
     let pool_fee = pool_info_before.pool_fee;
     let reserve_prize = (prize.as_yoctonear() * pool_fee as u128) / 100u128;
 
-    let user_prize= NearToken::from_yoctonear(prize.as_yoctonear() - reserve_prize);
+    let user_prize = NearToken::from_yoctonear(prize.as_yoctonear() - reserve_prize);
 
     let ana_before_win = contract
         .view("get_user_info")
@@ -265,18 +266,24 @@ async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
     let winner = raffle.json::<AccountId>()?;
 
     assert_eq!(&winner, ana.id());
-    
+
     // After the raffle
     let ana_after_win = contract
         .view("get_user_info")
         .args_json(json!({"user": ana.id()}))
         .await?
         .json::<UserInfo>()?;
-    
+
     let pool_info_after = contract.view("get_pool_info").await?.json::<Pool>()?;
 
-    assert_eq!(ana_after_win.staked, (ana_before_win.staked.saturating_add(user_prize)));
-    assert_eq!(pool_info_after.tickets, pool_info_before.tickets.saturating_add(prize));
+    assert_eq!(
+        ana_after_win.staked,
+        (ana_before_win.staked.saturating_add(user_prize))
+    );
+    assert_eq!(
+        pool_info_after.tickets,
+        pool_info_before.tickets.saturating_add(prize)
+    );
     assert_eq!(pool_info_after.prize, NearToken::from_yoctonear(0));
 
     Ok(())
@@ -365,6 +372,64 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+// #[tokio::test]
+// async fn test_experimental() -> Result<(), Box<dyn std::error::Error>> {
+//     let (ana, bob, _guardian, contract, sandbox) = init().await?;
+
+//     let _ana_deposit = ana
+//         .call(contract.id(), "deposit_and_stake")
+//         .deposit(NearToken::from_near(1))
+//         .max_gas()
+//         .transact()
+//         .await?;
+
+//     let _bob_deposit = bob
+//         .call(contract.id(), "deposit_and_stake")
+//         .deposit(NearToken::from_near(1))
+//         .max_gas()
+//         .transact()
+//         .await?;
+
+//     let _charles_deposit = bob
+//         .call(contract.id(), "deposit_and_stake")
+//         .deposit(NearToken::from_near(1))
+//         .max_gas()
+//         .transact()
+//         .await?;
+
+
+//     let _prize_update_outcome = ana
+//         .call(contract.id(), "update_prize")
+//         .max_gas()
+//         .transact()
+//         .await?;
+//        // Fast forward 200 blocks
+//     let blocks_to_advance = 200;
+
+//     sandbox.fast_forward(blocks_to_advance).await?;
+    
+//     let contract_state = contract.view_state().await?;
+
+//     let winners: Vec<AccountId> = vec![];
+
+//     for n in 0..100 {
+//         sandbox.patch_state(contract.id(), b"STATE", contract_state).await?;
+   
+
+
+
+//     } 
+
+    
+
+//     let raffle = contract.call("raffle").max_gas().transact().await?;
+//     let winner = raffle.json::<AccountId>()?;
+
+
+
+//     Ok(())
+// }
 
 // Helpers --------------------------------------------------------
 fn roundup_balance(amount: NearToken) -> u128 {

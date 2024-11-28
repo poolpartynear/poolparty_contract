@@ -198,13 +198,3 @@ impl Contract {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use near_sdk::test_utils::{accounts, VMContextBuilder};
-    use near_sdk::{testing_env, MockedBlockchain};
-
-    #[test]
-    fn test_new_contract() {}
-}
