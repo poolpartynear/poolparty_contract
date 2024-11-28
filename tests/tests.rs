@@ -27,7 +27,7 @@ pub async fn init(
 
     // the mock validator
     let staking_contract = sandbox
-        .dev_deploy(&std::fs::read("./tests/mock-validator/staking.wasm")?)
+        .dev_deploy(&std::fs::read("./tests/mock-validator/validator.wasm")?)
         .await?;
 
     let now = Utc::now().timestamp();
@@ -239,19 +239,41 @@ async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
     let blocks_to_advance = 200;
 
     sandbox.fast_forward(blocks_to_advance).await?;
+    // Before the raffle
+    let pool_info_before = contract.view("get_pool_info").await?.json::<Pool>()?;
 
     let prize_update_outcome = ana
         .call(contract.id(), "update_prize")
         .max_gas()
         .transact()
         .await?;
-
     assert!(prize_update_outcome.is_success());
+
+    let prize = contract.view("get_pool_info").await?.json::<Pool>()?.prize;
+
+    let ana_before_win = contract
+        .view("get_user_info")
+        .args_json(json!({"user": ana.id()}))
+        .await?
+        .json::<UserInfo>()?;
 
     let raffle = contract.call("raffle").max_gas().transact().await?;
     let winner = raffle.json::<AccountId>()?;
 
     assert_eq!(&winner, ana.id());
+    
+    // After the raffle
+    let ana_after_win = contract
+        .view("get_user_info")
+        .args_json(json!({"user": ana.id()}))
+        .await?
+        .json::<UserInfo>()?;
+    
+    let pool_info_after = contract.view("get_pool_info").await?.json::<Pool>()?;
+
+    assert_eq!(ana_after_win.staked, (ana_before_win.staked.saturating_add(prize)));
+    assert_eq!(pool_info_after.tickets, pool_info_before.tickets.saturating_add(prize));
+    assert_eq!(pool_info_after.prize, NearToken::from_yoctonear(0));
 
     Ok(())
 }
@@ -280,7 +302,6 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
         .max_gas()
         .transact()
         .await?;
-
     assert!(ana_unstake.is_success());
 
     let ana_balance = contract
@@ -296,9 +317,9 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(ana_balance.available, NearToken::from_near(10));
     assert_eq!(ana_balance.withdraw_turn.0, 0);
 
-    let pool_balance = contract.view("get_pool_info").await?.json::<Pool>()?;
+    let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
     assert_eq!(
-        pool_balance.to_unstake.as_yoctonear(),
+        pool_info.to_unstake.as_yoctonear(),
         NearToken::from_near(10).as_yoctonear()
     );
 
@@ -307,45 +328,38 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
         .max_gas()
         .transact()
         .await?;
-
     assert!(interact_external.is_success());
 
-    let pool_balance = contract.view("get_pool_info").await?.json::<Pool>()?;
-    assert_eq!(pool_balance.to_unstake.as_yoctonear(), 0);
-    assert_eq!(pool_balance.next_withdraw_turn, 1);
+    let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
+    assert_eq!(pool_info.to_unstake.as_yoctonear(), 0);
+    assert_eq!(pool_info.next_withdraw_turn, 1);
     assert_eq!(
-        pool_balance.tickets.as_yoctonear(),
+        pool_info.tickets.as_yoctonear(),
         NearToken::from_near(42).as_yoctonear()
     );
 
-    let ana_prev = ana
-        .view_account()
-        .await?;
-    
+    let ana_prev = ana.view_account().await?;
     let ana_withdraw = ana
         .call(contract.id(), "withdraw_all")
         .max_gas()
         .transact()
         .await?;
-
     assert!(ana_withdraw.is_success());
 
-    let ana_current = ana
-        .view_account()
-        .await?;
-    
+    let ana_current = ana.view_account().await?;
+
     // Round up Annas balances
     let roundup_prev = roundup_balance(ana_prev.balance);
     let roundup_curr = roundup_balance(ana_current.balance);
-
-    assert_eq!(roundup_prev + NearToken::from_near(10).as_yoctonear(), roundup_curr);
-
+    assert_eq!(
+        roundup_prev + NearToken::from_near(10).as_yoctonear(),
+        roundup_curr
+    );
 
     let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
-    assert_eq!(pool_info.next_withdraw_turn, 2);
+    assert_eq!(pool_info.next_withdraw_turn, 1);
 
     Ok(())
-
 }
 
 // Helpers --------------------------------------------------------

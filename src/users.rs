@@ -138,11 +138,14 @@ impl Contract {
         user.withdraw_turn = Some(turn);
     }
 
-    // TODO: needs to return u128 in range
+    pub(crate) fn set_withdraw_epoch_for(&mut self, user: &AccountId, epoch: u64) {
+        let user = self.users.map.get_mut(user).expect("User not found!");
+        user.available_when = epoch;
+    }
+
     // Returns a random number between min (included) and max (excluded)
-    // return u128.from(math.randomBuffer(16)) % (max_exc - min_inc) + min_inc
     fn random_u128(&self, min: u128, max: u128) -> u128 {
-        let random_seed = env::random_seed(); // TODO: Consider RNG
+        let random_seed = env::random_seed();
         let random = self.as_u128(random_seed.get(..16).unwrap());
         random % (max - min) + min
     }
@@ -161,11 +164,6 @@ impl Contract {
 
         // accum_weights[0] has the total of tickets in the pool
         // user_staked[0] is the tickets of the pool
-
-        log!("total tickets {}", self.users.tree[0].weight);
-        log!("user 0 tickets {}", self.users.tree[0].weight);
-        log!("user 1 tickets {}", self.users.tree[1].weight);
-        log!("user 2 tickets {}", self.users.tree[2].weight);
 
         if self.users.tree[0].weight > self.users.tree[0].staked {
             winning_ticket = self.random_u128(self.users.tree[0].staked, self.users.tree[0].weight);

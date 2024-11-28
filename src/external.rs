@@ -88,7 +88,7 @@ impl Contract {
     fn withdraw_external(&mut self) -> Promise {
         require!(env::prepaid_gas() >= Gas::from_tgas(300), "Not enough gas"); // TODO: evaluate
 
-        // Check that 4 epochs passed from the last unstake from external
+        // Check that 6 epochs passed from the last unstake from external
         require!(
             env::epoch_height() >= self.pool.next_withdraw_epoch,
             "Not enough time has passed"

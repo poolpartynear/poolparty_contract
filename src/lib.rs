@@ -26,7 +26,7 @@ const EPOCHS_WAIT: U64 = U64(4);
 const MIN_TO_RAFFLE: NearToken = NearToken::from_millinear(100);
 
 // Maximum amount to Raffle (50 NEAR)
-const MAX_TO_RAFFLE: NearToken = NearToken::from_near(50);
+const MAX_TO_RAFFLE: NearToken = NearToken::from_near(100);
 
 pub mod external;
 pub mod pool;
