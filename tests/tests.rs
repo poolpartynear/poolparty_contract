@@ -467,7 +467,7 @@ async fn test_random_u128() -> Result<(), Box<dyn std::error::Error>> {
     for i in min..=max {
         let count = results[i as usize];
         assert!(
-            count >= 3 && count <= 15,
+            count >= 6 && count <= 14,
             "Number {} appeared {} times",
             i,
             count
@@ -476,6 +476,47 @@ async fn test_random_u128() -> Result<(), Box<dyn std::error::Error>> {
 
     return Ok(());
 }
+
+#[tokio::test]
+async fn test_big_random_u128() -> Result<(), Box<dyn std::error::Error>> {
+    let (_ana, _bob, _guardian, contract, sandbox) = init().await?;
+    println!("Running test_random_u128, which may take a while... plase wait");
+
+    let twenty_five_near = NearToken::from_near(5).as_yoctonear();
+    
+    let tries = 100;
+    let mut results = vec![0, 0, 0, 0];
+
+    let min = twenty_five_near;
+    let max = twenty_five_near.saturating_mul(4);
+
+    for _ in 0..tries {
+        let rand_u128 = contract
+            .call("random_u128")
+            .args_json(json!((min.to_string(), max.to_string())))
+            .max_gas()
+            .transact()
+            .await?
+            .json::<U128>()?;
+
+        assert!(rand_u128.0 >= min && rand_u128.0 <= max);
+
+        results[(rand_u128.0.div_euclid(twenty_five_near)) as usize] += 1;
+    }
+
+    for i in 1..=4 {
+        let count = results[i as usize];
+        assert!(
+            count >= 20 && count <= 30,
+            "Number {} appeared {} times",
+            i,
+            count
+        );
+    }
+
+    return Ok(());
+}
+
 
 // Helpers --------------------------------------------------------
 fn roundup_balance(amount: NearToken) -> u128 {
