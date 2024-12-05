@@ -126,7 +126,6 @@ impl Contract {
             self.pool.next_withdraw_epoch -= 1;
             false
         } else {
-            // TODO ASK
             self.next_action = Action::Unstake;
             self.pool.next_withdraw_turn += 1;
             true

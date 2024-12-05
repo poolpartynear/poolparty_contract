@@ -1,5 +1,5 @@
 use crate::*;
-use near_sdk::{near, store::LookupMap, BorshStorageKey, NearToken};
+use near_sdk::{json_types::U128, near, store::LookupMap, BorshStorageKey, NearToken};
 
 #[near(serializers=[borsh, json])]
 #[derive(Clone)]
@@ -10,7 +10,6 @@ pub struct Winner(pub AccountId, pub NearToken, pub u64);
 pub struct User {
     pub node: u32,
     pub unstaked: u128,
-    pub available_when: u64, // ASK?
     pub withdraw_turn: Option<u64>,
 }
 
@@ -73,7 +72,6 @@ impl Contract {
             User {
                 node: uid,
                 unstaked: 0,
-                available_when: 0,
                 withdraw_turn: None,
             },
         );
@@ -119,12 +117,7 @@ impl Contract {
 
     pub(crate) fn set_withdraw_turn_for(&mut self, user: &AccountId, turn: u64) {
         let user = self.users.map.get_mut(user).expect("User not found!");
-        user.withdraw_turn = Some(turn);
-    }
-
-    pub(crate) fn set_withdraw_epoch_for(&mut self, user: &AccountId, epoch: u64) {
-        let user = self.users.map.get_mut(user).expect("User not found!");
-        user.available_when = epoch;
+        user.withdraw_turn = Some(turn)
     }
 
     fn remove_tickets_from(&mut self, user: &AccountId, amount: u128) {
@@ -149,18 +142,19 @@ impl Contract {
         // user_staked[0] is the tickets of the pool(guardian)
 
         if self.users.tree[0].weight > self.users.tree[0].staked {
-            winning_ticket = self.random_u128(self.users.tree[0].staked, self.users.tree[0].weight);
+            winning_ticket = self.random_u128(U128(self.users.tree[0].staked), U128(self.users.tree[0].weight)).0;
         }
 
         let uid = self.find_user_with_ticket(winning_ticket);
 
         self.users.tree[uid].account_id.clone()
     }
-
-    fn random_u128(&self, min: u128, max: u128) -> u128 {
+    
+    #[private]
+    pub fn random_u128(&self, min: U128, max: U128) -> U128 {
         let random_seed = env::random_seed();
         let random = self.as_u128(random_seed.get(..16).unwrap());
-        random % (max - min) + min
+        U128(random % (max.0 - min.0) + min.0)
     }
 
     // TODO: Consult with Rust proficient

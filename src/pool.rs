@@ -20,7 +20,7 @@ pub struct Pool {
     pub last_prize_update: u64,
     pub pool_fee: u8,
     pub next_raffle: u64,
-    pub withdraw_ready: bool, //ASK?
+    pub withdraw_ready: bool,
     pub tickets: NearToken,
     pub is_interacting: bool,
     pub next_withdraw_turn: u64,
@@ -38,7 +38,7 @@ impl Default for Pool {
             next_raffle: 0,
             withdraw_ready: false,
             is_interacting: false,
-            next_withdraw_turn: 0,
+            next_withdraw_turn: 1,
             next_withdraw_epoch: 0,
         }
     }
@@ -166,8 +166,6 @@ impl Contract {
 
         // the user will be able to withdraw in the next withdraw_turn
         self.set_withdraw_turn_for(&user, self.pool.next_withdraw_turn);
-
-        self.set_withdraw_epoch_for(&user, env::epoch_height() + self.config.epochs_wait);
 
         // update user info
         self.unstake_tickets_for(&user, amount);

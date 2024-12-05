@@ -44,7 +44,6 @@ pub struct UserInfo {
     pub staked: NearToken,
     pub available: NearToken,
     pub withdraw_turn: U64,
-    pub available_when: U64,
 }
 
 #[near(serializers=[borsh, json])]
@@ -120,7 +119,6 @@ impl Contract {
             staked,
             available: NearToken::from_yoctonear(user.unstaked),
             withdraw_turn: U64(user.withdraw_turn.unwrap_or(0)),
-            available_when: U64(user.available_when),
         }
     }
 
@@ -143,4 +141,65 @@ impl Contract {
     pub fn set_epochs_wait(&mut self, epochs: u64) {
         self.config.epochs_wait = epochs;
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::task::Context;
+
+    use super::*;
+
+    use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::{testing_env, Gas, VMContext};
+
+    fn get_context(account: String, attached_deposit: NearToken) -> VMContext {
+        VMContextBuilder::new()
+            .account_balance(NearToken::from_near(20))
+            .predecessor_account_id(account.parse().unwrap())
+            .attached_deposit(attached_deposit)
+            .prepaid_gas(Gas::from_tgas(300))
+            .build()
+    }
+
+    #[test]
+    fn get_user_with() {
+        let mut contract =
+            Contract::new(accounts(0), accounts(1), None, None, None, None, None, None);
+        let context = get_context("user".to_string(), NearToken::from_near(1));
+        testing_env!(context);
+
+        // contract.deposit_and_stake();
+
+        // contract.add_new_user(&accounts(2));
+        // contract.deposit_and_stake_callback(Ok(()), accounts(2), NearToken::from_near(1));
+        // for i in 0..participants {
+        //     contract.add_new_user();
+        //     contract.deposit_and_stake_callback(Ok(()), format!("user{}", i).parse().unwrap(), NearToken::from_near(1 + i));
+        // }
+
+        assert_eq!(contract.pool.tickets, NearToken::from_near(1));
+    }
+
+    // fn get_context(account: String, attached_deposit: NearToken) -> VMContext {
+    //     VMContextBuilder::new()
+    //         .account_balance(NearToken::from_near(20))
+    //         .predecessor_account_id(account.parse().unwrap())
+    //         .attached_deposit(attached_deposit)
+    //         .prepaid_gas(Gas::from_tgas(300))
+    //         .build()
+    // }
+
+    // #[test]
+    // fn initalizes() {
+    //     let contract = init_contract();
+
+    //     assert_eq!("external_pool", contract.config.external_pool);
+    //     assert_eq!("guardian", contract.config.guardian);
+    //     assert_eq!(NearToken::from_near(10), contract.config.min_to_raffle);
+    //     assert_eq!(NearToken::from_near(100), contract.config.max_to_raffle);
+    //     assert_eq!(NearToken::from_near(1), contract.config.min_deposit);
+    //     assert_eq!(NearToken::from_near(10), contract.config.max_deposit);
+    //     assert_eq!(4, contract.config.epochs_wait);
+    //     assert_eq!(86400000000000, contract.config.time_between_raffles);
+    // }
 }

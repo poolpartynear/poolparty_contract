@@ -1,6 +1,6 @@
 use chrono::Utc;
 use near_primitives::types::AccountId;
-use near_sdk::store::vec;
+use near_sdk::json_types::U128;
 use near_sdk::NearToken;
 use near_workspaces::network::Sandbox;
 use near_workspaces::{Account, Contract, Worker};
@@ -374,62 +374,108 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // #[tokio::test]
-// async fn test_experimental() -> Result<(), Box<dyn std::error::Error>> {
-//     let (ana, bob, _guardian, contract, sandbox) = init().await?;
+// async fn test_unstake_multiple() -> Result<(), Box<dyn std::error::Error>> {
+//     let (ana, bob, _guardian, contract, _sandbox) = init().await?;
 
 //     let _ana_deposit = ana
 //         .call(contract.id(), "deposit_and_stake")
-//         .deposit(NearToken::from_near(1))
+//         .deposit(NearToken::from_near(50))
 //         .max_gas()
 //         .transact()
 //         .await?;
 
 //     let _bob_deposit = bob
 //         .call(contract.id(), "deposit_and_stake")
-//         .deposit(NearToken::from_near(1))
+//         .deposit(NearToken::from_near(5))
 //         .max_gas()
 //         .transact()
 //         .await?;
 
-//     let _charles_deposit = bob
-//         .call(contract.id(), "deposit_and_stake")
-//         .deposit(NearToken::from_near(1))
+//     let ana_unstake = ana
+//         .call(contract.id(), "unstake")
+//         .args_json(json!({"amount": NearToken::from_near(10)}))
 //         .max_gas()
 //         .transact()
 //         .await?;
 
+//     assert!(ana_unstake.is_success());
 
-//     let _prize_update_outcome = ana
-//         .call(contract.id(), "update_prize")
+//         let _interact = contract
+//         .call("interact_external")
 //         .max_gas()
 //         .transact()
 //         .await?;
-//        // Fast forward 200 blocks
-//     let blocks_to_advance = 200;
 
-//     sandbox.fast_forward(blocks_to_advance).await?;
-    
-//     let contract_state = contract.view_state().await?;
+//     let bob_unstake = bob
+//         .call(contract.id(), "unstake")
+//         .args_json(json!({"amount": NearToken::from_near(1)}))
+//         .max_gas()
+//         .transact()
+//         .await?;
 
-//     let winners: Vec<AccountId> = vec![];
+//     assert!(bob_unstake.is_success());
 
-//     for n in 0..100 {
-//         sandbox.patch_state(contract.id(), b"STATE", contract_state).await?;
-   
+//     let ana_info = contract
+//         .view("get_user_info")
+//         .args_json(json!({"user": bob.id()}))
+//         .await?
+//         .json::<UserInfo>()?;
 
+//     let bob_info = contract
+//         .view("get_user_info")
+//         .args_json(json!({"user": bob.id()}))
+//         .await?
+//         .json::<UserInfo>()?;
 
+//     let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
 
-//     } 
+//     println!(
+//         "ana_info: {}\nbob_info: {}\npool_info: {:?}",
+//         ana_info.withdraw_turn.0, bob_info.withdraw_turn.0, pool_info
+//     );
 
-    
-
-//     let raffle = contract.call("raffle").max_gas().transact().await?;
-//     let winner = raffle.json::<AccountId>()?;
-
-
-
-//     Ok(())
+//     return Ok(());
 // }
+
+#[tokio::test]
+async fn test_random_u128() -> Result<(), Box<dyn std::error::Error>> {
+    let (_ana, _bob, _guardian, contract, sandbox) = init().await?;
+    println!("Running test_random_u128, which may take a while... plase wait");
+
+    let tries = 100;
+    let mut results = vec![];
+
+    let min = 3;
+    let max = 13;
+
+    for _ in 0..tries {
+        let rand_u128 = contract
+            .call("random_u128")
+            .args_json(json!((min.to_string(), max.to_string())))
+            .max_gas()
+            .transact()
+            .await?
+            .json::<U128>()?;
+
+        assert!(rand_u128.0 >= min && rand_u128.0 <= max);
+
+        results.push(rand_u128.0);
+
+        sandbox.fast_forward(1).await?;
+    }
+
+    for i in min..=max {
+        let count = results[i as usize];
+        assert!(
+            count >= 3 && count <= 15,
+            "Number {} appeared {} times",
+            i,
+            count
+        );
+    }
+
+    return Ok(());
+}
 
 // Helpers --------------------------------------------------------
 fn roundup_balance(amount: NearToken) -> u128 {
