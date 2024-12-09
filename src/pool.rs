@@ -94,7 +94,7 @@ impl Contract {
                 "deposit_and_stake".to_string(),
                 NO_ARGS,
                 deposit,
-                Gas::from_tgas(12), // Todo: Check the Gas amount
+                Gas::from_tgas(12),
             )
             .then(
                 Promise::new(env::current_account_id()).function_call(
@@ -103,7 +103,7 @@ impl Contract {
                         .to_string()
                         .into_bytes(),
                     NO_DEPOSIT,
-                    Gas::from_tgas(45), // Todo: Check the Gas amount
+                    Gas::from_tgas(45),
                 ),
             )
     }
@@ -192,7 +192,7 @@ impl Contract {
         require!(
             env::prepaid_gas().ge(&Gas::from_tgas(20)),
             "Use at least 20Tgas"
-        ); // Todo: Check the Gas amount
+        );
         require!(self.is_registered(&user), "User is not registered");
 
         require!(

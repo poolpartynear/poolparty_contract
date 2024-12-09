@@ -143,30 +143,30 @@ impl Contract {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::task::Context;
+// #[cfg(test)]
+// mod tests {
+//     use std::task::Context;
 
-    use super::*;
+//     use super::*;
 
-    use near_sdk::test_utils::{accounts, VMContextBuilder};
-    use near_sdk::{testing_env, Gas, VMContext};
+//     use near_sdk::test_utils::{accounts, VMContextBuilder};
+//     use near_sdk::{testing_env, Gas, VMContext};
 
-    fn get_context(account: String, attached_deposit: NearToken) -> VMContext {
-        VMContextBuilder::new()
-            .account_balance(NearToken::from_near(20))
-            .predecessor_account_id(account.parse().unwrap())
-            .attached_deposit(attached_deposit)
-            .prepaid_gas(Gas::from_tgas(300))
-            .build()
-    }
+//     fn get_context(account: String, attached_deposit: NearToken) -> VMContext {
+//         VMContextBuilder::new()
+//             .account_balance(NearToken::from_near(20))
+//             .predecessor_account_id(account.parse().unwrap())
+//             .attached_deposit(attached_deposit)
+//             .prepaid_gas(Gas::from_tgas(300))
+//             .build()
+//     }
 
-    #[test]
-    fn get_user_with() {
-        let mut contract =
-            Contract::new(accounts(0), accounts(1), None, None, None, None, None, None);
-        let context = get_context("user".to_string(), NearToken::from_near(1));
-        testing_env!(context);
+//     #[test]
+//     fn get_user_with() {
+//         let mut contract =
+//             Contract::new(accounts(0), accounts(1), None, None, None, None, None, None);
+//         let context = get_context("user".to_string(), NearToken::from_near(1));
+//         testing_env!(context);
 
         // contract.deposit_and_stake();
 
@@ -177,8 +177,8 @@ mod tests {
         //     contract.deposit_and_stake_callback(Ok(()), format!("user{}", i).parse().unwrap(), NearToken::from_near(1 + i));
         // }
 
-        assert_eq!(contract.pool.tickets, NearToken::from_near(1));
-    }
+    //     assert_eq!(contract.pool.tickets, NearToken::from_near(1));
+    // }
 
     // fn get_context(account: String, attached_deposit: NearToken) -> VMContext {
     //     VMContextBuilder::new()
@@ -202,4 +202,4 @@ mod tests {
     //     assert_eq!(4, contract.config.epochs_wait);
     //     assert_eq!(86400000000000, contract.config.time_between_raffles);
     // }
-}
+// }

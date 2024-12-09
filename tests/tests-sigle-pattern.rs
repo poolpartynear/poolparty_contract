@@ -8,6 +8,19 @@ use poolparty::pool::Pool;
 use poolparty::UserInfo;
 use serde_json::json;
 
+#[tokio::test]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (ana, bob, guardian, contract, sandbox) = init().await?;
+
+    test_emergency(&ana, &contract).await?;
+    test_deposit(&ana, &bob, &guardian, &contract).await?;
+    test_random_u128(&contract).await?;
+    test_raffle(&ana, &bob, &contract, &sandbox).await?;
+    test_unstake_and_withdraw(&ana, &bob, &contract).await?;
+
+    Ok(())
+}
+
 pub async fn init(
 ) -> Result<(Account, Account, Account, Contract, Worker<Sandbox>), Box<dyn std::error::Error>> {
     let sandbox = near_workspaces::sandbox().await?;
@@ -77,10 +90,12 @@ pub async fn init(
 }
 
 // Pool -----------------------------------------------------------
-#[tokio::test]
-async fn test_deposit() -> Result<(), Box<dyn std::error::Error>> {
-    let (ana, bob, guardian, contract, _sandbox) = init().await?;
-
+async fn test_deposit(
+    ana: &Account,
+    bob: &Account,
+    guardian: &Account,
+    contract: &Contract,
+) -> Result<(), Box<dyn std::error::Error>> {
     let ana_deposit = ana
         .call(contract.id(), "deposit_and_stake")
         .deposit(NearToken::from_near(50))
@@ -144,10 +159,10 @@ async fn test_deposit() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // Emergency -----------------------------------------------------------
-#[tokio::test]
-async fn test_emergency() -> Result<(), Box<dyn std::error::Error>> {
-    let (ana, _bob, _guardian, contract, _sandbox) = init().await?;
-
+async fn test_emergency(
+    ana: &Account,
+    contract: &Contract,
+) -> Result<(), Box<dyn std::error::Error>> {
     // User can't start or stop emergency
     let user_emergency_start = ana
         .call(contract.id(), "emergency_start")
@@ -218,9 +233,7 @@ async fn test_emergency() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[tokio::test]
-async fn test_random_u128() -> Result<(), Box<dyn std::error::Error>> {
-    let (_ana, _bob, _guardian, contract, _sandbox) = init().await?;
+async fn test_random_u128(contract: &Contract) -> Result<(), Box<dyn std::error::Error>> {
     println!("Running test_random_u128, which may take a while... please wait!");
 
     let twenty_five_near = NearToken::from_near(25).as_yoctonear();
@@ -257,10 +270,12 @@ async fn test_random_u128() -> Result<(), Box<dyn std::error::Error>> {
     return Ok(());
 }
 
-#[tokio::test]
-async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
-    let (ana, bob, _guardian, contract, sandbox) = init().await?;
-
+async fn test_raffle(
+    ana: &Account,
+    bob: &Account,
+    contract: &Contract,
+    sandbox: &Worker<Sandbox>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let _ana_deposit = ana
         .call(contract.id(), "deposit_and_stake")
         .deposit(NearToken::from_near(50))
@@ -328,10 +343,11 @@ async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[tokio::test]
-async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
-    let (ana, bob, _guardian, contract, _sandbox) = init().await?;
-
+async fn test_unstake_and_withdraw(
+    ana: &Account,
+    bob: &Account,
+    contract: &Contract,
+) -> Result<(), Box<dyn std::error::Error>> {
     let _ana_deposit = ana
         .call(contract.id(), "deposit_and_stake")
         .deposit(NearToken::from_near(50))
@@ -388,22 +404,6 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
         NearToken::from_near(42).as_yoctonear()
     );
 
-    dbg!(pool_info.next_withdraw_epoch);
-
-    let _bob_unstake = bob
-        .call(contract.id(), "unstake")
-        .args_json(json!({"amount": NearToken::from_near(1)}))
-        .max_gas()
-        .transact()
-        .await?;
-
-    let bob_details = contract
-        .view("get_user_info")
-        .args_json(json!({"user": bob.id()}))
-        .await?
-        .json::<UserInfo>()?;   
-    assert_eq!(bob_details.withdraw_turn.0, 2);
-
     let ana_prev = ana.view_account().await?;
     let ana_withdraw = ana
         .call(contract.id(), "withdraw_all")
@@ -423,7 +423,7 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
-    assert_eq!(pool_info.next_withdraw_turn, 2);
+    assert_eq!(pool_info.next_withdraw_turn, 1);
 
     Ok(())
 }

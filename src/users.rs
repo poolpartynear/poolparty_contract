@@ -59,7 +59,7 @@ impl Contract {
         user_node.staked
     }
 
-    pub fn get_withdraw_turn_for(&self, user: &AccountId) -> Option<u64> {
+    pub(crate) fn get_withdraw_turn_for(&self, user: &AccountId) -> Option<u64> {
         let user = self.get_user(&user);
         user.withdraw_turn
     }
