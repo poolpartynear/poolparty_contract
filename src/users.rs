@@ -142,14 +142,19 @@ impl Contract {
         // user_staked[0] is the tickets of the pool(guardian)
 
         if self.users.tree[0].weight > self.users.tree[0].staked {
-            winning_ticket = self.random_u128(U128(self.users.tree[0].staked), U128(self.users.tree[0].weight)).0;
+            winning_ticket = self
+                .random_u128(
+                    U128(self.users.tree[0].staked),
+                    U128(self.users.tree[0].weight),
+                )
+                .0;
         }
 
         let uid = self.find_user_with_ticket(winning_ticket);
 
         self.users.tree[uid].account_id.clone()
     }
-    
+
     #[private]
     pub fn random_u128(&self, min: U128, max: U128) -> U128 {
         let random_seed = env::random_seed();
@@ -190,5 +195,136 @@ impl Contract {
                 uid = right
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::{testing_env, Gas, VMContext};
+
+    #[test]
+    fn test_pool() {
+        let guardian: AccountId = "guardian".parse().unwrap();
+        let mut contract = Contract::new(
+            accounts(0),
+            guardian.clone(),
+            None,
+            None,
+            Some(NearToken::from_yoctonear(1)),
+            None,
+            None,
+            None,
+        );
+
+        set_context("guardian", NearToken::from_yoctonear(1));
+        contract.deposit_and_stake();
+
+        set_context("contract", NearToken::from_near(0));
+        contract.deposit_and_stake_callback(Ok(()), guardian, NearToken::from_yoctonear(1));
+
+        for i in 0..10 {
+            set_context(&format!("user{}", i), NearToken::from_yoctonear(1 + i));
+            contract.deposit_and_stake();
+
+            set_context("contract", NearToken::from_near(0));
+            contract.deposit_and_stake_callback(
+                Ok(()),
+                format!("user{}", i).parse().unwrap(),
+                NearToken::from_yoctonear(1 + i),
+            );
+        }
+
+        let expected_weights: Vec<u128> = vec![55, 38, 16, 21, 15, 6, 7, 8, 9, 10];
+        let weights = contract
+            .users
+            .tree
+            .iter()
+            .map(|user| user.weight)
+            .collect::<Vec<u128>>();
+
+        assert_eq!(weights, expected_weights);
+
+        // let expected_weights: Array<i32> = [55, 38, 16, 21, 15, 6, 7, 8, 9, 10]
+
+        // for (let i: i32 = 0; i < subjects; i++) {
+        //   expect(get_accum_weights(i)).toBe(u128.from(expected_weights[i]))
+        // }
+
+        // // Modify some of them
+        // deposit_and_stake_callback("5", u128.from(2))
+
+        // deposit_and_stake_callback("7", u128.from(1))
+
+        // expected_weights = [58, 39, 18, 22, 15, 8, 7, 9, 9, 10]
+
+        // for (let i: i32 = 0; i < subjects; i++) {
+        //   expect(get_accum_weights(i)).toBe(u128.from(expected_weights[i]))
+        // }
+
+        // deposit_and_stake_callback("3", u128.from(3))
+
+        // expected_weights = [61, 42, 18, 25, 15, 8, 7, 9, 9, 10]
+
+        // for (let i: i32 = 0; i < subjects; i++) {
+        //   expect(get_accum_weights(i)).toBe(u128.from(expected_weights[i]))
+        // }
+
+        // deposit_and_stake_callback("theguardian", u128.from(1))
+
+        // expected_weights = [62, 42, 18, 25, 15, 8, 7, 9, 9, 10]
+
+        // for (let i: i32 = 0; i < subjects; i++) {
+        //   expect(get_accum_weights(i)).toBe(u128.from(expected_weights[i]))
+        // }
+
+        // VMContext.setPredecessor_account_id("8")
+        // VMContext.setPrepaid_gas(300000000000000)
+        // unstake(u128.from(1))
+
+        // expected_weights = [61, 41, 18, 24, 15, 8, 7, 9, 8, 10]
+
+        // for (let i: i32 = 0; i < subjects; i++) {
+        //   expect(get_accum_weights(i)).toBe(u128.from(expected_weights[i]))
+        // }
+
+        // VMContext.setPredecessor_account_id("4")
+        // VMContext.setPrepaid_gas(300000000000000)
+        // unstake(u128.from(3))
+
+        // expected_weights = [58, 38, 18, 24, 12, 8, 7, 9, 8, 10]
+
+        // for (let i: i32 = 0; i < subjects; i++) {
+        //   expect(get_accum_weights(i)).toBe(u128.from(expected_weights[i]))
+        // }
+
+        // expect(find_user_with_ticket(u128.from(0))).toBe(0, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(1))).toBe(0, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(2))).toBe(1, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(3))).toBe(1, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(40))).toBe(2, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(41))).toBe(2, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(4))).toBe(3, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(9))).toBe(3, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(44))).toBe(5, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(50))).toBe(5, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(51))).toBe(6, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(52))).toBe(6, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(57))).toBe(6, "wrong winner")
+        // expect(find_user_with_ticket(u128.from(11))).toBe(7, "wrong winner")
+    }
+
+    fn set_context(account: &str, attached_deposit: NearToken) {
+        let context = VMContextBuilder::new()
+            .account_balance(NearToken::from_near(20))
+            .predecessor_account_id(account.parse().unwrap())
+            .current_account_id("contract".parse().unwrap())
+            .attached_deposit(attached_deposit)
+            .prepaid_gas(Gas::from_tgas(300))
+            .build();
+
+        testing_env!(context);
     }
 }

@@ -219,6 +219,17 @@ async fn test_emergency() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
+async fn eucliden_div() -> Result<(), Box<dyn std::error::Error>> {
+    let a = 10u128;
+
+    assert_eq!(a.div_euclid(9u128), 1);
+    assert_eq!(a.div_euclid(6u128), 1);
+    assert_eq!(a.div_euclid(5u128), 2);
+    assert_eq!(a.div_euclid(3u128), 3);
+    return Ok(());
+}
+
+#[tokio::test]
 async fn test_random_u128() -> Result<(), Box<dyn std::error::Error>> {
     let (_ana, _bob, _guardian, contract, _sandbox) = init().await?;
     println!("Running test_random_u128, which may take a while... please wait!");
@@ -239,7 +250,7 @@ async fn test_random_u128() -> Result<(), Box<dyn std::error::Error>> {
             .transact()
             .await?
             .json::<U128>()?;
-        assert!(rand_u128.0 >= min && rand_u128.0 <= max);
+        assert!(rand_u128.0 >= min && rand_u128.0 < max);
 
         results[(rand_u128.0.div_euclid(twenty_five_near)) as usize] += 1;
     }
@@ -247,7 +258,7 @@ async fn test_random_u128() -> Result<(), Box<dyn std::error::Error>> {
     for i in 1..=4 {
         let count = results[i];
         assert!(
-            count >= 20 && count <= 30, // adjust to allow for deviation
+            count >= 15 && count <= 35, // 99% confidence interval
             "Number {} appeared {} times",
             i,
             count
