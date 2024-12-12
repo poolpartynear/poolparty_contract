@@ -203,6 +203,11 @@ impl Contract {
         let amount = self.withdraw_all_for(&user);
         require!(amount != 0, "Nothing to withdraw");
 
+        require!(
+            env::epoch_height() >= self.pool.next_withdraw_epoch,
+            "Not enough time has passed"
+        );
+
         // Transfer the tokens to the user
         Promise::new(user.clone()).transfer(NearToken::from_yoctonear(amount));
 
