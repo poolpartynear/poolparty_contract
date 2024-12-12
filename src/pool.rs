@@ -251,9 +251,7 @@ impl Contract {
 
         // add the prize to the pool, and reset the prize_pool
         self.pool.tickets = self.pool.tickets.saturating_add(prize);
-
-        self.pool.prize = NearToken::from_yoctonear(0);
-
+        
         // Set next raffle time
         self.pool.next_raffle = now + self.config.time_between_raffles;
         self.pool.prize = NearToken::from_near(0);

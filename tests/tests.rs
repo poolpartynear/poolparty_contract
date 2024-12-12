@@ -341,7 +341,7 @@ async fn test_raffle() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
-    let (ana, bob, _guardian, contract, _sandbox) = init().await?;
+    let (ana, bob, _guardian, contract, sandbox) = init().await?;
 
     let _ana_deposit = ana
         .call(contract.id(), "deposit_and_stake")
@@ -410,7 +410,7 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
         .view("get_user_info")
         .args_json(json!({"user": bob.id()}))
         .await?
-        .json::<UserInfo>()?;   
+        .json::<UserInfo>()?;
     assert_eq!(bob_details.withdraw_turn.0, 2);
 
     let ana_prev = ana.view_account().await?;
@@ -422,18 +422,26 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     assert!(ana_withdraw.is_failure());
 
+    let four_epochs: u64 = 4 * 43_200;
+    sandbox.fast_forward(four_epochs).await?;
+
     // Ana waits the 4 epochs
-    // TODO
+    let ana_withdraw = ana
+        .call(contract.id(), "withdraw_all")
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(ana_withdraw.is_success());
 
     let ana_current = ana.view_account().await?;
 
     // Round up Annas balances
     let roundup_prev = roundup_balance(ana_prev.balance);
     let roundup_curr = roundup_balance(ana_current.balance);
-    // assert_eq!(
-    //     roundup_prev + NearToken::from_near(10).as_yoctonear(),
-    //     roundup_curr
-    // );
+    assert_eq!(
+        roundup_prev + NearToken::from_near(10).as_yoctonear(),
+        roundup_curr
+    );
 
     let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
     assert_eq!(pool_info.next_withdraw_turn, 2);
