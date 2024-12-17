@@ -11,7 +11,6 @@ use serde_json::json;
 pub async fn init(
 ) -> Result<(Account, Account, Account, Contract, Worker<Sandbox>), Box<dyn std::error::Error>> {
     let sandbox = near_workspaces::sandbox().await?;
-
     let root = sandbox.root_account().unwrap();
 
     // who controls the reserve
@@ -43,6 +42,7 @@ pub async fn init(
                 "external_pool": staking_contract.id(),
                 "first_raffle": a_minute_from_now.to_string(),
                 "time_between_raffles": one_minute.to_string(),
+                "epochs_wait": 1
             }
         ))
         .transact()
@@ -414,7 +414,7 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(bob_details.withdraw_turn.0, 2);
 
     let ana_prev = ana.view_account().await?;
-    //  Ana doesnt wait the 4 epochs
+    //  Ana doesnt wait the 1 epoch
     let ana_withdraw = ana
         .call(contract.id(), "withdraw_all")
         .max_gas()
@@ -422,10 +422,10 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     assert!(ana_withdraw.is_failure());
 
-    let four_epochs: u64 = 4 * 43_200;
-    sandbox.fast_forward(four_epochs).await?;
+    let one_epoch: u64 = 43_200;
+    sandbox.fast_forward(one_epoch).await?;
 
-    // Ana waits the 4 epochs
+    // Ana waits the 1 epoch
     let ana_withdraw = ana
         .call(contract.id(), "withdraw_all")
         .max_gas()
@@ -446,6 +446,142 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
     let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
     assert_eq!(pool_info.next_withdraw_turn, 2);
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_full_flow() -> Result<(), Box<dyn std::error::Error>> {
+    let (ana, bob, _guardian, contract, sandbox) = init().await?;
+    let root: Account = sandbox.root_account().unwrap();
+    // Add more users
+    let charlie = root
+        .create_subaccount("charlie")
+        .initial_balance(NearToken::from_near(100))
+        .transact()
+        .await?
+        .unwrap();
+
+    let dana = root
+        .create_subaccount("dana")
+        .initial_balance(NearToken::from_near(100))
+        .transact()
+        .await?
+        .unwrap();
+
+    // Deposits
+    let _ana_deposit = ana
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(1))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let _bob_deposit = bob
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(1))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let _charlie_deposit = charlie
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(1))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let _dana_deposit = dana
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(10))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
+    assert_eq!(pool_info.tickets, NearToken::from_near(14)); // 1near deposited from guaridan during init
+
+    // Fast forward 200 blocks
+    sandbox.fast_forward(200).await?;
+
+    // Update prize
+    let _prize_update = ana
+        .call(contract.id(), "update_prize")
+        .max_gas()
+        .transact()
+        .await?;
+
+    // Raffle
+    let _raffle = contract.call("raffle").max_gas().transact().await?;
+
+    // Unstake in same turn
+    let _ana_unstake = ana
+        .call(contract.id(), "unstake")
+        .args_json(json!({"amount": NearToken::from_near(1)}))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let _bob_unstake = bob
+        .call(contract.id(), "unstake")
+        .args_json(json!({"amount": NearToken::from_near(1)}))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
+    assert_eq!(pool_info.to_unstake, NearToken::from_near(2));
+
+    let ana_info = contract
+        .view("get_user_info")
+        .args_json(json!({"user": ana.id()}))
+        .await?
+        .json::<UserInfo>()?;
+
+    let bob_info = contract
+        .view("get_user_info")
+        .args_json(json!({"user": bob.id()}))
+        .await?
+        .json::<UserInfo>()?;
+
+    assert_eq!(ana_info.withdraw_turn, bob_info.withdraw_turn);
+    let _interact_external = contract
+        .call("interact_external")
+        .max_gas()
+        .transact()
+        .await?;
+
+    //  unstake on next turn
+
+    let _charlie_unstake = charlie
+        .call(contract.id(), "unstake")
+        .args_json(json!({"amount": NearToken::from_near(1)}))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let charlie_info = contract
+        .view("get_user_info")
+        .args_json(json!({"user": charlie.id()}))
+        .await?
+        .json::<UserInfo>()?;
+    assert_eq!(charlie_info.withdraw_turn.0, 2);
+
+    let _dana_deposit = dana
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(89))
+        .max_gas()
+        .transact()
+        .await?;
+
+    // Raffle before wainting time_between_raffles to pas
+    let raffle = contract.call("raffle").max_gas().transact().await?;
+    assert!(raffle.is_failure());
+
+    sandbox.fast_forward(200).await?;
+    contract.update_prize().await?;
+
+    // withdraw
+    // raffle again
     Ok(())
 }
 
