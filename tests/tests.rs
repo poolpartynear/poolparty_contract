@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use near_primitives::types::AccountId;
 use near_sdk::json_types::U128;
 use near_sdk::NearToken;
@@ -30,9 +30,9 @@ pub async fn init(
         .dev_deploy(&std::fs::read("./tests/mock-validator/validator.wasm")?)
         .await?;
 
-    let now = Utc::now().timestamp();
-    let one_minute = 60 * 1000000000;
-    let a_minute_from_now = now * 1000000000 + one_minute;
+    let now = Utc::now();
+    let one_minute = Duration::minutes(1);
+    let a_minute_from_now = now + one_minute;
 
     let init = contract
         .call("new")
@@ -40,14 +40,13 @@ pub async fn init(
             {
                 "guardian": guardian.id(),
                 "external_pool": staking_contract.id(),
-                "first_raffle": a_minute_from_now.to_string(),
-                "time_between_raffles": one_minute.to_string(),
-                "epochs_wait": 1
+                "first_raffle": a_minute_from_now.timestamp_millis().to_string(),
+                "time_between_raffles": one_minute.num_milliseconds().to_string(),
+                "min_to_raffle": "0",
             }
         ))
         .transact()
         .await?;
-
     assert!(init.is_success());
 
     let guardian_deposit = guardian
@@ -422,8 +421,7 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     assert!(ana_withdraw.is_failure());
 
-    let one_epoch: u64 = 43_200;
-    sandbox.fast_forward(one_epoch).await?;
+    sandbox.fast_forward(500).await?;
 
     // Ana waits the 1 epoch
     let ana_withdraw = ana
@@ -471,37 +469,37 @@ async fn test_full_flow() -> Result<(), Box<dyn std::error::Error>> {
     // Deposits
     let _ana_deposit = ana
         .call(contract.id(), "deposit_and_stake")
-        .deposit(NearToken::from_near(1))
+        .deposit(NearToken::from_near(2))
         .max_gas()
         .transact()
         .await?;
 
     let _bob_deposit = bob
         .call(contract.id(), "deposit_and_stake")
-        .deposit(NearToken::from_near(1))
+        .deposit(NearToken::from_near(2))
         .max_gas()
         .transact()
         .await?;
 
     let _charlie_deposit = charlie
         .call(contract.id(), "deposit_and_stake")
-        .deposit(NearToken::from_near(1))
+        .deposit(NearToken::from_near(2))
         .max_gas()
         .transact()
         .await?;
 
     let _dana_deposit = dana
         .call(contract.id(), "deposit_and_stake")
-        .deposit(NearToken::from_near(10))
+        .deposit(NearToken::from_near(5))
         .max_gas()
         .transact()
         .await?;
 
     let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
-    assert_eq!(pool_info.tickets, NearToken::from_near(14)); // 1near deposited from guaridan during init
+    assert_eq!(pool_info.tickets, NearToken::from_near(12)); // 1 millinear deposited from guaridan during init
 
     // Fast forward 200 blocks
-    sandbox.fast_forward(200).await?;
+    sandbox.fast_forward(60).await?;
 
     // Update prize
     let _prize_update = ana
@@ -551,7 +549,6 @@ async fn test_full_flow() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     //  unstake on next turn
-
     let _charlie_unstake = charlie
         .call(contract.id(), "unstake")
         .args_json(json!({"amount": NearToken::from_near(1)}))
@@ -568,20 +565,74 @@ async fn test_full_flow() -> Result<(), Box<dyn std::error::Error>> {
 
     let _dana_deposit = dana
         .call(contract.id(), "deposit_and_stake")
-        .deposit(NearToken::from_near(89))
+        .deposit(NearToken::from_near(80))
         .max_gas()
         .transact()
         .await?;
 
-    // Raffle before wainting time_between_raffles to pas
+    // Raffle before wainting time_between_raffles to pass
     let raffle = contract.call("raffle").max_gas().transact().await?;
     assert!(raffle.is_failure());
 
-    sandbox.fast_forward(200).await?;
-    contract.update_prize().await?;
+    sandbox.fast_forward(60).await?;
 
-    // withdraw
-    // raffle again
+    let _dana_deposit = dana
+        .call(contract.id(), "deposit_and_stake")
+        .deposit(NearToken::from_near(5))
+        .max_gas()
+        .transact()
+        .await?;
+
+    let _update_prize = ana
+        .call(contract.id(), "update_prize")
+        .max_gas()
+        .transact()
+        .await?;
+
+    // raffle again after waiting time_between_raffles
+    let raffle = contract.call("raffle").max_gas().transact().await?;
+    assert!(raffle.is_success());
+
+    let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
+
+    assert_eq!(pool_info.to_unstake, NearToken::from_near(1));
+    assert_eq!(pool_info.prize, NearToken::from_near(0));
+
+    // epochs_wait has not passed
+    let bob_withdraw = charlie
+        .call(contract.id(), "withdraw_all")
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(bob_withdraw.is_failure());
+
+    // Move to next epoch (self.config.epochs_wait)
+    sandbox.fast_forward(2000).await?;
+
+    let interact_external = contract
+        .call("interact_external")
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(interact_external.is_success());
+
+    let bob_balance_before = bob.view_account().await?.balance;
+
+    // epochs_wait has passed
+    let bob_withdraw = bob
+        .call(contract.id(), "withdraw_all")
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(bob_withdraw.is_success());
+
+    let bob_balance_after = bob.view_account().await?.balance;
+
+    assert_eq!(
+        roundup_balance(bob_balance_after),
+        roundup_balance(bob_balance_before.saturating_add(NearToken::from_near(1)))
+    );
+
     Ok(())
 }
 

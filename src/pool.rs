@@ -20,23 +20,21 @@ pub struct Pool {
     pub last_prize_update: u64,
     pub pool_fee: u8,
     pub next_raffle: u64,
-    pub withdraw_ready: bool,
     pub tickets: NearToken,
     pub is_interacting: bool,
     pub next_withdraw_turn: u64,
     pub next_withdraw_epoch: u64,
 }
 
-impl Default for Pool {
-    fn default() -> Self {
+impl Pool {
+    pub(crate) fn new(first_raffle: u64) -> Self {
         Self {
             tickets: NearToken::from_yoctonear(0),
             to_unstake: NearToken::from_yoctonear(0),
             prize: NearToken::from_yoctonear(0),
             last_prize_update: 0,
             pool_fee: 0,
-            next_raffle: 0,
-            withdraw_ready: false,
+            next_raffle: first_raffle,
             is_interacting: false,
             next_withdraw_turn: 1,
             next_withdraw_epoch: 0,

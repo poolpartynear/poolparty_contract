@@ -78,6 +78,7 @@ impl Contract {
     pub fn new(
         external_pool: AccountId,
         guardian: AccountId,
+        first_raffle: U64,
         min_to_raffle: Option<NearToken>,
         max_to_raffle: Option<NearToken>,
         min_deposit: Option<NearToken>,
@@ -97,7 +98,7 @@ impl Contract {
                 time_between_raffles: time_between_raffles.unwrap_or(RAFFLE_WAIT).0,
                 emergency: false,
             },
-            pool: Pool::default(),
+            pool: Pool::new(first_raffle.0),
             users: Users::default(),
             next_action: Action::Unstake,
         }

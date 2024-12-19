@@ -203,6 +203,7 @@ mod tests {
 
     use near_sdk::test_utils::{accounts, VMContextBuilder};
     use near_sdk::{testing_env, Gas};
+    use near_sdk::json_types::U64;
 
     #[test]
     fn test_user_handling() {
@@ -210,6 +211,7 @@ mod tests {
         let mut contract = Contract::new(
             accounts(0),
             guardian.clone(),
+            U64(env::block_timestamp_ms()),
             None,
             None,
             Some(NearToken::from_yoctonear(1)),
@@ -253,6 +255,7 @@ mod tests {
         let mut contract = Contract::new(
             accounts(0),
             guardian.clone(),
+            U64(env::block_timestamp_ms()),
             None,
             None,
             Some(NearToken::from_yoctonear(1)),
