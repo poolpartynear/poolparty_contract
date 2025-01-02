@@ -49,11 +49,11 @@ impl Contract {
         self.users.map.contains_key(user)
     }
 
-    pub fn get_user(&self, user: &AccountId) -> &User {
+    pub(crate) fn get_user(&self, user: &AccountId) -> &User {
         self.users.map.get(user).expect("User not found!")
     }
 
-    pub fn get_staked_for(&self, user: &AccountId) -> u128 {
+    pub(crate) fn get_staked_for(&self, user: &AccountId) -> u128 {
         let user = self.get_user(&user);
         let user_node = self.users.tree.get(user.node).expect("User not found!");
         user_node.staked

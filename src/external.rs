@@ -98,7 +98,6 @@ impl Contract {
         self.start_interacting();
 
         // Withdraw tokens from external pool
-
         Promise::new(self.config.external_pool.clone())
             .function_call(
                 "withdraw_all".to_string(),

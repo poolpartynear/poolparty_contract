@@ -8,8 +8,8 @@ use users::Users;
 pub const NO_ARGS: Vec<u8> = vec![];
 pub const NO_DEPOSIT: NearToken = NearToken::from_near(0);
 
-// The raffle happens once per day (expressed in ns)
-const RAFFLE_WAIT: U64 = U64(86400000000000);
+// The raffle happens once per day (expressed in ms)
+const RAFFLE_WAIT: U64 = U64(86400000);
 
 // The users cannot have more than a certain amount of NEARs,
 // to limit whale's size in the pool. Default: A thousand NEARs
@@ -106,10 +106,6 @@ impl Contract {
 
     pub fn get_config(&self) -> Config {
         self.config.clone()
-    }
-
-    pub fn get_pool_info(&self) -> &Pool {
-        &self.pool
     }
 
     pub fn get_user_info(&self, user: AccountId) -> UserInfo {
