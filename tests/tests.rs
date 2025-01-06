@@ -374,8 +374,8 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
         ana_balance.staked.as_yoctonear(),
         NearToken::from_near(40).as_yoctonear()
     );
-    assert_eq!(ana_balance.available, NearToken::from_near(10));
-    assert_eq!(ana_balance.withdraw_turn.0, 1);
+    assert_eq!(ana_balance.unstaked, NearToken::from_near(10));
+    assert_eq!(ana_balance.withdraw_turn, 1);
 
     let pool_info = contract.view("get_pool_info").await?.json::<Pool>()?;
     assert_eq!(
@@ -410,7 +410,7 @@ async fn test_unstake_and_withdraw() -> Result<(), Box<dyn std::error::Error>> {
         .args_json(json!({"user": bob.id()}))
         .await?
         .json::<UserInfo>()?;
-    assert_eq!(bob_details.withdraw_turn.0, 2);
+    assert_eq!(bob_details.withdraw_turn, 2);
 
     let ana_prev = ana.view_account().await?;
     //  Ana doesnt wait the 1 epoch
@@ -561,7 +561,7 @@ async fn test_full_flow() -> Result<(), Box<dyn std::error::Error>> {
         .args_json(json!({"user": charlie.id()}))
         .await?
         .json::<UserInfo>()?;
-    assert_eq!(charlie_info.withdraw_turn.0, 2);
+    assert_eq!(charlie_info.withdraw_turn, 2);
 
     let _dana_deposit = dana
         .call(contract.id(), "deposit_and_stake")

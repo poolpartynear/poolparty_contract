@@ -42,8 +42,9 @@ pub enum Action {
 #[derive(Clone)]
 pub struct UserInfo {
     pub staked: NearToken,
-    pub available: NearToken,
-    pub withdraw_turn: U64,
+    pub unstaked: NearToken,
+    pub available: bool,
+    pub withdraw_turn: u8,
 }
 
 #[near(serializers=[borsh, json])]
@@ -108,14 +109,55 @@ impl Contract {
         self.config.clone()
     }
 
-    pub fn get_user_info(&self, user: AccountId) -> UserInfo {
-        let user = self.users.map[&user].clone();
-        let staked = NearToken::from_yoctonear(self.users.tree[user.node].staked);
+// export function get_account(account_id: string): Users.User {
+  // Returns information for the account 'account_id'
+//   if (!Users.is_registered(account_id)) {
+//     return new Users.User(u128.Zero, u128.Zero, 0, false)
+//   }
 
-        UserInfo {
-            staked,
-            available: NearToken::from_yoctonear(user.unstaked),
-            withdraw_turn: U64(user.withdraw_turn.unwrap_or(0)),
+//   const tickets: u128 = Users.get_staked_for(account_id)
+//   const unstaked: u128 = Users.get_unstaked_for(account_id)
+
+//   const when: u64 = Users.get_withdraw_turn_for(account_id)
+//   const now: u64 = External.get_current_turn()
+
+//   // Compute remaining time for withdraw to be ready
+//   const remaining: u64 = (when > now) ? when - now : 0
+
+//   const available: bool = unstaked > u128.Zero && now >= when
+
+//   return new Users.User(tickets, unstaked, remaining, available)
+// }
+
+    pub fn get_user_info(&self, user: AccountId) -> UserInfo {
+        
+        match self.users.map.get(&user) {
+            Some(user) => {
+                let uid = user.node;
+                let user_node = self.users.tree[uid].clone(); 
+                
+                let staked = user_node.staked;
+                let when = user.withdraw_turn.unwrap_or(0);
+                let now = self.pool.next_withdraw_epoch - 1;
+
+                let remaining = if when > now { when - now } else { 0 };
+                let available = user.unstaked > 0 && now >= when;
+
+                UserInfo {
+                    staked: NearToken::from_yoctonear(staked),
+                    unstaked: NearToken::from_yoctonear(user.unstaked),
+                    available,
+                    withdraw_turn: remaining as u8,
+                }
+            },
+            None => {
+                UserInfo {
+                    staked: NearToken::from_yoctonear(0),
+                    unstaked: NearToken::from_yoctonear(0),
+                    available: false,
+                    withdraw_turn: 0,
+                }
+            }
         }
     }
 
